@@ -25,6 +25,12 @@ export interface SextantNodeDetails {
   system?: string;
   confidence?: number;
   source?: SextantSource;
+  code?: {
+    kind?: "call" | "condition" | "return" | "throw";
+    call?: string;
+    condition?: string;
+    snippet?: string;
+  };
 }
 
 export interface SextantNode {
@@ -53,6 +59,8 @@ export interface ProcessManifest {
   details?: {
     summary?: string;
     responsibilities?: string[];
+    flow?: string[];
+    risks?: string[];
     confidence?: number;
     suggestedSubflows?: Array<{
       id: string;

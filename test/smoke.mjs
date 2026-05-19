@@ -59,6 +59,7 @@ try {
   assert.match(html, /securityLevel: "loose"/);
   assert.match(html, /layout: "elk"/);
   assert.match(html, /sextantShowNode/);
+  assert.match(html, /Process Overview/);
 
   const legacySource = await readFile(path.join(root, "examples", "legacy-classify.ts"), "utf8");
   const inferred = inferProcessFromSource(legacySource, {
@@ -72,6 +73,10 @@ try {
   assert.equal(inferred.edges.some((edge) => edge.from === "return-4" && edge.to === "effect-5"), false);
   assert.equal(inferred.edges.some((edge) => edge.from === "branch-2" && edge.to === "effect-5" && edge.label === "no"), true);
   assert.equal(inferred.nodes.find((node) => node.id === "effect-5").details.source.line, 9);
+  assert.equal(inferred.nodes.find((node) => node.id === "branch-2").details.code.condition, "documentType.confidence < 0.85");
+  assert.match(inferred.nodes.find((node) => node.id === "branch-2").details.code.snippet, /if \(documentType\.confidence/);
+  assert.equal(inferred.nodes.find((node) => node.id === "effect-5").details.code.call, "saveToDrive");
+  assert.match(inferred.nodes.find((node) => node.id === "effect-5").details.code.snippet, /const driveFile = await saveToDrive/);
 
   const routerSource = await readFile(path.join(root, "src", "cli.js"), "utf8");
   const router = inferProcessFromSource(routerSource, {
@@ -98,6 +103,8 @@ try {
     process: {
       summary: "Classifie une piece jointe documentaire.",
       responsibilities: ["classification documentaire"],
+      flow: ["Detecter le type de document", "Envoyer en revue si la confiance est trop basse"],
+      risks: ["Le scan ne suit pas encore les helpers appeles."],
       confidence: 0.9
     },
     nodes: [
@@ -131,6 +138,8 @@ try {
   assert.equal(enriched.llm.model, "mock-model");
   assert.equal(enriched.llm.cache, "miss");
   assert.equal(enriched.nodes[0].label, "Classer piece jointe 1");
+  assert.deepEqual(enriched.details.flow, ["Detecter le type de document", "Envoyer en revue si la confiance est trop basse"]);
+  assert.deepEqual(enriched.details.risks, ["Le scan ne suit pas encore les helpers appeles."]);
   assert.deepEqual(enriched.edges, inferred.edges);
 
   const cached = await enrichManifestWithLlm(legacySource, inferred, {

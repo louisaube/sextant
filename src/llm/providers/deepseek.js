@@ -58,24 +58,31 @@ function systemPrompt() {
 Return ONLY valid JSON.
 Never invent nodes or edges.
 Only reference existing node ids.
-Improve business labels and node details.
+Use the code snippets, calls, conditions, and source lines from the manifest.
+Make the report concrete and operational, not abstract.
+Avoid generic labels such as "Check Scan Command" or "Process Step".
+Prefer labels like "If command is scan, parse args and scan the file".
+Keep node labels short enough for a Mermaid graph.
+Do not remove deterministic details.code fields.
 Allowed shape:
 {
   "version": 1,
   "process": {
-    "summary": "short process summary",
-    "responsibilities": ["short responsibility"],
+    "summary": "concrete summary of what the entry point does",
+    "responsibilities": ["concrete responsibility"],
+    "flow": ["main execution step in plain language"],
+    "risks": ["concrete ambiguity, failure mode, or code-reading warning"],
     "confidence": 0.0
   },
   "nodes": [
     {
       "id": "existing-node-id",
-      "label": "business label",
+      "label": "short operational label",
       "type": "entry|step|branch|effect|error|return|subflow",
       "system": "external system name when obvious",
       "confidence": 0.0,
       "details": {
-        "summary": "short explanation",
+        "summary": "concrete explanation anchored in the snippet",
         "rules": ["business rule"],
         "conditions": ["condition/filter"],
         "filters": ["filter"],
@@ -83,6 +90,12 @@ Allowed shape:
         "outputs": ["output data"],
         "responsibilities": ["responsibility"],
         "system": "external system name when obvious",
+        "code": {
+          "kind": "call|condition|return|throw",
+          "call": "real call name when present",
+          "condition": "real condition when present",
+          "snippet": "short source snippet, max 240 chars"
+        },
         "confidence": 0.0
       }
     }

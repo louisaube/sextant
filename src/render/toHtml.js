@@ -5,7 +5,7 @@ export function toHtml(manifest, options = {}) {
   const title = escapeHtml(manifest.title || manifest.id || "Sextant");
   const manifestJson = JSON.stringify(manifest).replace(/</g, "\\u003c");
   const llmBadge = manifest.llm?.enriched
-    ? `<span class="badge">LLM enriched · ${escapeHtml(manifest.llm.provider)} · ${escapeHtml(manifest.llm.model)} · cache ${escapeHtml(manifest.llm.cache)}</span>`
+    ? `<span class="badge">LLM enriched &middot; ${escapeHtml(manifest.llm.provider)} &middot; ${escapeHtml(manifest.llm.model)} &middot; cache ${escapeHtml(manifest.llm.cache)}</span>`
     : "";
 
   return `<!doctype html>
@@ -72,7 +72,7 @@ export function toHtml(manifest, options = {}) {
 
     main {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 360px;
+      grid-template-columns: minmax(0, 1fr) 420px;
       min-height: calc(100vh - 72px);
     }
 
@@ -147,6 +147,24 @@ export function toHtml(manifest, options = {}) {
       color: #4b3d2b;
     }
 
+    pre.code {
+      margin: 0;
+      overflow: auto;
+      white-space: pre-wrap;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #f7f0e4;
+      color: #35291c;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .source {
+      word-break: break-word;
+    }
+
     .empty {
       color: var(--muted);
       line-height: 1.5;
@@ -167,7 +185,7 @@ export function toHtml(manifest, options = {}) {
 <body>
   <header>
     <h1>${title}</h1>
-    <p>Sextant process graph. Macro first, details on click.</p>
+    <p>Sextant process graph. Concrete flow first, code-backed details on click.</p>
     ${llmBadge}
   </header>
   <main>
@@ -177,7 +195,7 @@ ${escapeHtml(mermaid)}
       </pre>
     </div>
     <aside>
-      <div id="detail" class="empty">Click a node to inspect rules, filters, inputs, outputs and source.</div>
+      <div id="detail"></div>
     </aside>
   </main>
   <script type="application/json" id="sextant-manifest">${manifestJson}</script>
@@ -186,6 +204,7 @@ ${escapeHtml(mermaid)}
 
     const manifest = JSON.parse(document.getElementById("sextant-manifest").textContent);
     const nodes = new Map(manifest.nodes.map((node) => [node.id, node]));
+    document.getElementById("detail").innerHTML = renderOverview();
 
     window.sextantShowNode = function sextantShowNode(id) {
       const node = nodes.get(id);
@@ -214,34 +233,69 @@ ${escapeHtml(mermaid)}
       }
     });
 
+    function renderOverview() {
+      const details = manifest.details || {};
+      return [
+        '<div class="eyebrow">Process Overview</div>',
+        '<h2>' + escapeHtml(manifest.title || manifest.id || "Process") + '</h2>',
+        manifest.source ? '<span class="meta">' + escapeHtml((manifest.source.mode || "process") + (manifest.source.entry ? " / " + manifest.source.entry : "")) + '</span>' : '',
+        details.summary ? '<section><h3>Summary</h3><p>' + escapeHtml(details.summary) + '</p></section>' : '',
+        list("Main Flow", details.flow, false),
+        list("Responsibilities", details.responsibilities, false),
+        list("Risks", details.risks, false),
+        subflows(details.suggestedSubflows),
+        manifest.source?.file ? '<section><h3>Source</h3><code class="source">' + escapeHtml(manifest.source.file) + '</code></section>' : ''
+      ].join("");
+    }
+
     function renderNode(node) {
       const details = node.details || {};
       return [
         '<div class="eyebrow">Node</div>',
         '<h2>' + escapeHtml(node.label) + '</h2>',
         '<span class="meta">' + escapeHtml(node.type) + '</span>',
+        code(details.code),
         details.summary ? '<section><h3>Summary</h3><p>' + escapeHtml(details.summary) + '</p></section>' : '',
-        list("Rules", details.rules),
-        list("Conditions", details.conditions),
-        list("Filters", details.filters),
-        list("Inputs", details.inputs),
-        list("Outputs", details.outputs),
+        list("Rules", details.rules, false),
+        list("Conditions", details.conditions, true),
+        list("Filters", details.filters, true),
+        list("Inputs", details.inputs, true),
+        list("Outputs", details.outputs, true),
+        list("Responsibilities", details.responsibilities, false),
         source(details.source),
         node.subflow ? '<section><h3>Subflow</h3><code>' + escapeHtml(node.subflow) + '</code></section>' : ''
       ].join("");
     }
 
-    function list(title, values) {
+    function list(title, values, asCode) {
       if (!values || values.length === 0) return "";
       return '<section><h3>' + title + '</h3><ul>' +
-        values.map((value) => '<li><code>' + escapeHtml(value) + '</code></li>').join("") +
+        values.map((value) => '<li>' + (asCode ? '<code>' : '') + escapeHtml(value) + (asCode ? '</code>' : '') + '</li>').join("") +
+        '</ul></section>';
+    }
+
+    function code(value) {
+      if (!value || (!value.snippet && !value.call && !value.condition)) return "";
+      return [
+        value.kind ? '<section><h3>Code Kind</h3><span class="meta">' + escapeHtml(value.kind) + '</span></section>' : '',
+        value.call ? '<section><h3>Call</h3><code>' + escapeHtml(value.call) + '</code></section>' : '',
+        value.condition ? '<section><h3>Condition</h3><code>' + escapeHtml(value.condition) + '</code></section>' : '',
+        value.snippet ? '<section><h3>Snippet</h3><pre class="code">' + escapeHtml(value.snippet) + '</pre></section>' : ''
+      ].join("");
+    }
+
+    function subflows(values) {
+      if (!values || values.length === 0) return "";
+      return '<section><h3>Suggested Subflows</h3><ul>' +
+        values.map((value) => '<li><strong>' + escapeHtml(value.label || value.id) + '</strong>' +
+          (value.summary ? '<br>' + escapeHtml(value.summary) : '') + '</li>').join("") +
         '</ul></section>';
     }
 
     function source(value) {
       if (!value || !value.file) return "";
       const line = value.line ? ":" + value.line : "";
-      return '<section><h3>Source</h3><code>' + escapeHtml(value.file + line) + '</code></section>';
+      return '<section><h3>Source</h3><code class="source">' + escapeHtml(value.file + line) + '</code></section>';
     }
 
     function escapeHtml(value) {

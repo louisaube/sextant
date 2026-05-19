@@ -1,7 +1,9 @@
 const detailArrays = ["rules", "conditions", "filters", "inputs", "outputs", "responsibilities"];
+const allowedCodeKinds = new Set(["call", "condition", "return", "throw"]);
 const allowedNodeTypes = new Set(["entry", "step", "branch", "effect", "error", "return", "subflow"]);
 const allowedTopLevel = new Set(["version", "process", "nodes", "suggestedSubflows"]);
 const allowedNodeFields = new Set(["id", "label", "type", "system", "confidence", "details"]);
+const allowedCodeFields = new Set(["kind", "call", "condition", "snippet"]);
 const allowedDetailsFields = new Set([
   "summary",
   "rules",
@@ -11,9 +13,10 @@ const allowedDetailsFields = new Set([
   "outputs",
   "responsibilities",
   "system",
-  "confidence"
+  "confidence",
+  "code"
 ]);
-const allowedProcessFields = new Set(["summary", "responsibilities", "confidence"]);
+const allowedProcessFields = new Set(["summary", "responsibilities", "flow", "risks", "confidence"]);
 const allowedSubflowFields = new Set(["id", "label", "nodeIds", "summary"]);
 
 export function validateEnrichment(value, manifest) {
@@ -59,6 +62,9 @@ export function validateEnrichment(value, manifest) {
       if (node.details.confidence !== undefined) {
         requireNumber(node.details.confidence, `nodes[${node.id}].details.confidence`);
       }
+      if (node.details.code !== undefined) {
+        validateCode(node.details.code, `nodes[${node.id}].details.code`);
+      }
     }
   }
 
@@ -76,6 +82,8 @@ export function validateEnrichment(value, manifest) {
     rejectUnknownKeys(value.process, allowedProcessFields, "process");
     if (value.process.summary !== undefined) requireString(value.process.summary, "process.summary");
     optionalStringArray(value.process.responsibilities, "process.responsibilities");
+    optionalStringArray(value.process.flow, "process.flow");
+    optionalStringArray(value.process.risks, "process.risks");
     if (value.process.confidence !== undefined) requireNumber(value.process.confidence, "process.confidence");
   }
 
@@ -85,6 +93,20 @@ export function validateEnrichment(value, manifest) {
     nodes,
     suggestedSubflows
   };
+}
+
+function validateCode(value, name) {
+  requireObject(value, name);
+  rejectUnknownKeys(value, allowedCodeFields, name);
+  if (value.kind !== undefined) {
+    requireString(value.kind, `${name}.kind`);
+    if (!allowedCodeKinds.has(value.kind)) {
+      throw new Error(`LLM enrichment field "${name}.kind" must be a known code kind.`);
+    }
+  }
+  if (value.call !== undefined) requireString(value.call, `${name}.call`);
+  if (value.condition !== undefined) requireString(value.condition, `${name}.condition`);
+  if (value.snippet !== undefined) requireString(value.snippet, `${name}.snippet`);
 }
 
 function optionalArray(value, name) {

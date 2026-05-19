@@ -12,10 +12,12 @@ export function mergeEnrichment(manifest, enrichment, metadata) {
     },
     details: {
       ...(manifest.details || {}),
-      summary: enrichment.process.summary,
-      responsibilities: enrichment.process.responsibilities || [],
-      confidence: enrichment.process.confidence,
-      suggestedSubflows: enrichment.suggestedSubflows || []
+      summary: enrichment.process.summary ?? manifest.details?.summary,
+      responsibilities: enrichment.process.responsibilities || manifest.details?.responsibilities || [],
+      flow: enrichment.process.flow || manifest.details?.flow || [],
+      risks: enrichment.process.risks || manifest.details?.risks || [],
+      confidence: enrichment.process.confidence ?? manifest.details?.confidence,
+      suggestedSubflows: enrichment.suggestedSubflows || manifest.details?.suggestedSubflows || []
     },
     nodes: manifest.nodes.map((node) => {
       const enriched = enrichmentById.get(node.id);
@@ -27,12 +29,26 @@ export function mergeEnrichment(manifest, enrichment, metadata) {
         type: enriched.type || node.type,
         system: enriched.system || node.system,
         confidence: enriched.confidence ?? node.confidence,
-        details: {
-          ...(node.details || {}),
-          ...(enriched.details || {})
-        }
+        details: mergeNodeDetails(node.details, enriched.details)
       };
     }),
     edges: manifest.edges
   };
+}
+
+function mergeNodeDetails(current, enriched) {
+  const details = {
+    ...(current || {}),
+    ...(enriched || {})
+  };
+  const code = {
+    ...(current?.code || {}),
+    ...(enriched?.code || {})
+  };
+
+  if (Object.keys(code).length > 0) {
+    details.code = code;
+  }
+
+  return details;
 }

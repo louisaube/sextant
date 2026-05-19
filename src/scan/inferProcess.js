@@ -54,11 +54,12 @@ export function inferProcessFromSource(source, options) {
       label: inferred.label,
       details: {
         summary: "Inferred from source line. Retrofit mode is approximate.",
-        conditions: inferred.type === "branch" ? [line.text.trim()] : [],
+        conditions: inferred.condition ? [inferred.condition] : [],
         filters: [],
         rules: [],
         inputs: [],
         outputs: inferred.type === "branch" ? ["yes", "no"] : [],
+        code: inferred.code,
         source: {
           file,
           line: line.number
@@ -107,6 +108,11 @@ export function inferProcessFromSource(source, options) {
       mode: "scan",
       file,
       entry
+    },
+    details: {
+      summary: `Retrofit scan of ${entry}.`,
+      flow: nodes.map((node) => node.label),
+      risks: ["Retrofit mode is approximate: review snippets and source lines before trusting the graph."]
     },
     nodes,
     edges,
@@ -181,15 +187,39 @@ function inferLine(line) {
   const text = line.text;
 
   if (/^(if|else\s+if|switch)\b/.test(text)) {
-    return { type: "branch", label: cleanDecision(text) };
+    const condition = extractCondition(text);
+    return {
+      type: "branch",
+      label: cleanDecision(text),
+      condition,
+      code: {
+        kind: "condition",
+        condition,
+        snippet: snippet(text)
+      }
+    };
   }
 
   if (/^throw\b/.test(text)) {
-    return { type: "error", label: compact(text) };
+    return {
+      type: "error",
+      label: compact(text),
+      code: {
+        kind: "throw",
+        snippet: snippet(text)
+      }
+    };
   }
 
   if (/^return\b/.test(text)) {
-    return { type: "return", label: compact(text) };
+    return {
+      type: "return",
+      label: compact(text),
+      code: {
+        kind: "return",
+        snippet: snippet(text)
+      }
+    };
   }
 
   const call = firstCallName(text);
@@ -197,11 +227,27 @@ function inferLine(line) {
 
   return {
     type: looksLikeEffect(call, text) ? "effect" : "step",
-    label: humanizeCall(call)
+    label: humanizeCall(call),
+    call,
+    code: {
+      kind: "call",
+      call,
+      snippet: snippet(text)
+    }
   };
 }
 
 function cleanDecision(text) {
+  return compact(text.replace(/\s*\{\s*$/, ""));
+}
+
+function extractCondition(text) {
+  const ifMatch = /^(?:else\s+)?if\s*\((.*)\)\s*\{?$/.exec(text);
+  if (ifMatch) return compact(ifMatch[1]);
+
+  const switchMatch = /^switch\s*\((.*)\)\s*\{?$/.exec(text);
+  if (switchMatch) return compact(`switch ${switchMatch[1]}`);
+
   return compact(text.replace(/\s*\{\s*$/, ""));
 }
 
@@ -225,6 +271,11 @@ function humanizeCall(call) {
 
 function compact(text) {
   return text.length > 72 ? `${text.slice(0, 69)}...` : text;
+}
+
+function snippet(text) {
+  const clean = String(text).replace(/\s+/g, " ").trim();
+  return clean.length > 240 ? `${clean.slice(0, 237)}...` : clean;
 }
 
 function slug(value) {
