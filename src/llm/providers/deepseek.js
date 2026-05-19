@@ -60,6 +60,9 @@ Never invent nodes or edges.
 Only reference existing node ids.
 Use the code snippets, calls, conditions, and source lines from the manifest.
 Make the report concrete and operational, not abstract.
+Explain it for a smart non-developer who needs to understand the effect of the process.
+Always identify the overall effect: what changes, what is produced, or what becomes possible after this process runs.
+Always include a simple input-to-output example.
 Avoid generic labels such as "Check Scan Command" or "Process Step".
 Prefer labels like "If command is scan, parse args and scan the file".
 Keep node labels short enough for a Mermaid graph.
@@ -69,6 +72,13 @@ Allowed shape:
   "version": 1,
   "process": {
     "summary": "concrete summary of what the entry point does",
+    "plainLanguage": "explain this process for a non-developer",
+    "effect": "the overall visible or operational effect",
+    "example": {
+      "scenario": "short concrete scenario",
+      "input": "what a user/system gives this process",
+      "output": "what the process produces or changes"
+    },
     "responsibilities": ["concrete responsibility"],
     "flow": ["main execution step in plain language"],
     "risks": ["concrete ambiguity, failure mode, or code-reading warning"],
@@ -83,6 +93,8 @@ Allowed shape:
       "confidence": 0.0,
       "details": {
         "summary": "concrete explanation anchored in the snippet",
+        "plainLanguage": "what this node means for a non-developer",
+        "effect": "what this node changes, decides, produces, or ends",
         "rules": ["business rule"],
         "conditions": ["condition/filter"],
         "filters": ["filter"],

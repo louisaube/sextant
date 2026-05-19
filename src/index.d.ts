@@ -16,6 +16,8 @@ export interface SextantSource {
 
 export interface SextantNodeDetails {
   summary?: string;
+  plainLanguage?: string;
+  effect?: string;
   rules?: string[];
   conditions?: string[];
   filters?: string[];
@@ -58,6 +60,13 @@ export interface ProcessManifest {
   subflows?: ProcessManifest[];
   details?: {
     summary?: string;
+    plainLanguage?: string;
+    effect?: string;
+    example?: {
+      scenario?: string;
+      input?: string;
+      output?: string;
+    };
     responsibilities?: string[];
     flow?: string[];
     risks?: string[];

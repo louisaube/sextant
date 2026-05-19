@@ -120,6 +120,34 @@ export function toHtml(manifest, options = {}) {
       font-weight: 700;
     }
 
+    .explain {
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff8ea;
+      line-height: 1.5;
+    }
+
+    .example {
+      display: grid;
+      gap: 10px;
+    }
+
+    .example div {
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #f7f0e4;
+    }
+
+    .example strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+    }
+
     section {
       margin-top: 20px;
     }
@@ -239,6 +267,9 @@ ${escapeHtml(mermaid)}
         '<div class="eyebrow">Process Overview</div>',
         '<h2>' + escapeHtml(manifest.title || manifest.id || "Process") + '</h2>',
         manifest.source ? '<span class="meta">' + escapeHtml((manifest.source.mode || "process") + (manifest.source.entry ? " / " + manifest.source.entry : "")) + '</span>' : '',
+        details.plainLanguage ? '<section><h3>For a non-developer</h3><div class="explain">' + escapeHtml(details.plainLanguage) + '</div></section>' : '',
+        details.effect ? '<section><h3>Overall Effect</h3><div class="explain">' + escapeHtml(details.effect) + '</div></section>' : '',
+        example(details.example),
         details.summary ? '<section><h3>Summary</h3><p>' + escapeHtml(details.summary) + '</p></section>' : '',
         list("Main Flow", details.flow, false),
         list("Responsibilities", details.responsibilities, false),
@@ -254,6 +285,8 @@ ${escapeHtml(mermaid)}
         '<div class="eyebrow">Node</div>',
         '<h2>' + escapeHtml(node.label) + '</h2>',
         '<span class="meta">' + escapeHtml(node.type) + '</span>',
+        details.plainLanguage ? '<section><h3>For a non-developer</h3><div class="explain">' + escapeHtml(details.plainLanguage) + '</div></section>' : '',
+        details.effect ? '<section><h3>Local Effect</h3><div class="explain">' + escapeHtml(details.effect) + '</div></section>' : '',
         code(details.code),
         details.summary ? '<section><h3>Summary</h3><p>' + escapeHtml(details.summary) + '</p></section>' : '',
         list("Rules", details.rules, false),
@@ -290,6 +323,15 @@ ${escapeHtml(mermaid)}
         values.map((value) => '<li><strong>' + escapeHtml(value.label || value.id) + '</strong>' +
           (value.summary ? '<br>' + escapeHtml(value.summary) : '') + '</li>').join("") +
         '</ul></section>';
+    }
+
+    function example(value) {
+      if (!value || (!value.scenario && !value.input && !value.output)) return "";
+      return '<section><h3>Example</h3><div class="example">' +
+        (value.scenario ? '<div><strong>Scenario</strong>' + escapeHtml(value.scenario) + '</div>' : '') +
+        (value.input ? '<div><strong>Input</strong><code>' + escapeHtml(value.input) + '</code></div>' : '') +
+        (value.output ? '<div><strong>Output</strong>' + escapeHtml(value.output) + '</div>' : '') +
+        '</div></section>';
     }
 
     function source(value) {

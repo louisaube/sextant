@@ -19,6 +19,25 @@ const effectWords = [
   "db"
 ];
 
+const callLabels = {
+  printHelp: "Show help to the user",
+  initProject: "Create Sextant config",
+  parseArgs: "Read command options",
+  renderFile: "Render a workflow report",
+  watchFile: "Watch and refresh report",
+  scanFile: "Scan source file",
+  writeReport: "Write HTML, Mermaid, and manifest",
+  toHtml: "Build the HTML page",
+  toMermaid: "Build the Mermaid diagram",
+  inferProcessFromSource: "Infer a process map",
+  enrichManifestWithLlm: "Recontextualize with LLM",
+  detectDocumentType: "Detect document type",
+  createReviewTask: "Create manual review task",
+  saveToDrive: "Save file to Drive",
+  updatePipedriveDeal: "Update Pipedrive deal",
+  sendClassificationEmail: "Email classification result"
+};
+
 export function inferProcessFromSource(source, options) {
   const entry = options.entry;
   const file = options.file || "unknown";
@@ -31,6 +50,7 @@ export function inferProcessFromSource(source, options) {
       label: entry,
       details: {
         summary: "Entry point inferred from existing code.",
+        plainLanguage: `This is where the ${entry} process starts.`,
         source: { file }
       }
     }
@@ -54,6 +74,8 @@ export function inferProcessFromSource(source, options) {
       label: inferred.label,
       details: {
         summary: "Inferred from source line. Retrofit mode is approximate.",
+        plainLanguage: explainNode(inferred),
+        effect: explainNodeEffect(inferred),
         conditions: inferred.condition ? [inferred.condition] : [],
         filters: [],
         rules: [],
@@ -110,8 +132,8 @@ export function inferProcessFromSource(source, options) {
       entry
     },
     details: {
-      summary: `Retrofit scan of ${entry}.`,
-      flow: nodes.map((node) => node.label),
+      ...explainProcess(entry, file, nodes),
+      flow: nodes.map((node) => node.details?.plainLanguage || node.label),
       risks: ["Retrofit mode is approximate: review snippets and source lines before trusting the graph."]
     },
     nodes,
@@ -190,7 +212,7 @@ function inferLine(line) {
     const condition = extractCondition(text);
     return {
       type: "branch",
-      label: cleanDecision(text),
+      label: labelDecision(condition, text),
       condition,
       code: {
         kind: "condition",
@@ -203,7 +225,7 @@ function inferLine(line) {
   if (/^throw\b/.test(text)) {
     return {
       type: "error",
-      label: compact(text),
+      label: labelError(text),
       code: {
         kind: "throw",
         snippet: snippet(text)
@@ -214,7 +236,7 @@ function inferLine(line) {
   if (/^return\b/.test(text)) {
     return {
       type: "return",
-      label: compact(text),
+      label: labelReturn(text),
       code: {
         kind: "return",
         snippet: snippet(text)
@@ -237,8 +259,99 @@ function inferLine(line) {
   };
 }
 
+function explainProcess(entry, file, nodes) {
+  if (entry === "main" && nodes.some((node) => node.details?.code?.condition?.includes("command ==="))) {
+    return {
+      summary: "Command-line router for Sextant.",
+      plainLanguage: "When someone types a Sextant command in a terminal, this process decides which action to run.",
+      effect: "It turns one typed command into one visible result: help text, a config file, a rendered report, a watch process, a scanned report, or an error.",
+      example: {
+        scenario: "A user wants to inspect an existing source file.",
+        input: "sextant scan examples/legacy-classify.ts --entry classifyAttachment -o report.html",
+        output: "Sextant reads the file, builds a process map, and writes report.html plus the matching Mermaid and manifest files."
+      }
+    };
+  }
+
+  const effectCalls = nodes
+    .filter((node) => node.type === "effect" && node.details?.code?.call)
+    .map((node) => node.details.code.call);
+  const returns = nodes
+    .filter((node) => node.type === "return" && node.details?.code?.snippet)
+    .map((node) => node.details.code.snippet);
+
+  return {
+    summary: `Retrofit scan of ${entry}.`,
+    plainLanguage: `This map follows what happens after ${entry} is called.`,
+    effect: effectCalls.length > 0
+      ? `It can change external systems or outputs through: ${effectCalls.join(", ")}.`
+      : "It mainly organizes decisions and internal function calls.",
+    example: {
+      scenario: `Someone calls ${entry} from ${file}.`,
+      input: `${entry}(...)`,
+      output: returns.length > 0 ? returns.join(" or ") : "The process reaches the final action shown in the graph."
+    }
+  };
+}
+
+function explainNode(inferred) {
+  if (inferred.type === "branch") {
+    return `Decide whether this condition is true: ${inferred.condition}.`;
+  }
+  if (inferred.type === "effect") {
+    return `Run ${inferred.call}; this probably changes something outside the current function.`;
+  }
+  if (inferred.type === "step") {
+    return `Run ${inferred.call}; this delegates part of the work to another function.`;
+  }
+  if (inferred.type === "return") {
+    return "Stop this path and send a result back to the caller.";
+  }
+  if (inferred.type === "error") {
+    return "Stop this path by raising an error.";
+  }
+  return "Follow this step in the process.";
+}
+
+function explainNodeEffect(inferred) {
+  if (inferred.type === "branch") {
+    return "Chooses which path the process follows next.";
+  }
+  if (inferred.type === "effect") {
+    return `Visible or external effect likely produced by ${inferred.call}.`;
+  }
+  if (inferred.type === "step") {
+    return `Moves work into ${inferred.call}.`;
+  }
+  if (inferred.type === "return") {
+    return "Ends this path.";
+  }
+  if (inferred.type === "error") {
+    return "Rejects this path as invalid or unsupported.";
+  }
+  return "";
+}
+
 function cleanDecision(text) {
   return compact(text.replace(/\s*\{\s*$/, ""));
+}
+
+function labelDecision(condition, text) {
+  const commandMatch = /command === ["']([^"']+)["']/.exec(condition);
+  if (commandMatch) return `If command is ${commandMatch[1]}`;
+  if (condition.includes("help") || condition.includes("--help")) return "If user asks for help";
+  if (text.startsWith("switch")) return cleanDecision(text);
+  return cleanDecision(text);
+}
+
+function labelReturn(text) {
+  if (text === "return;") return "End this path";
+  return compact(text);
+}
+
+function labelError(text) {
+  if (text.includes("Unknown command")) return "Reject unknown command";
+  return compact(text);
 }
 
 function extractCondition(text) {
@@ -262,6 +375,8 @@ function looksLikeEffect(call, text) {
 }
 
 function humanizeCall(call) {
+  if (callLabels[call]) return callLabels[call];
+
   return call
     .split(".")
     .pop()

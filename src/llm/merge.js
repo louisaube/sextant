@@ -13,6 +13,9 @@ export function mergeEnrichment(manifest, enrichment, metadata) {
     details: {
       ...(manifest.details || {}),
       summary: enrichment.process.summary ?? manifest.details?.summary,
+      plainLanguage: enrichment.process.plainLanguage ?? manifest.details?.plainLanguage,
+      effect: enrichment.process.effect ?? manifest.details?.effect,
+      example: enrichment.process.example || manifest.details?.example,
       responsibilities: enrichment.process.responsibilities || manifest.details?.responsibilities || [],
       flow: enrichment.process.flow || manifest.details?.flow || [],
       risks: enrichment.process.risks || manifest.details?.risks || [],

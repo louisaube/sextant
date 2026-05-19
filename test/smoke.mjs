@@ -60,6 +60,8 @@ try {
   assert.match(html, /layout: "elk"/);
   assert.match(html, /sextantShowNode/);
   assert.match(html, /Process Overview/);
+  assert.match(html, /For a non-developer/);
+  assert.match(html, /Overall Effect/);
 
   const legacySource = await readFile(path.join(root, "examples", "legacy-classify.ts"), "utf8");
   const inferred = inferProcessFromSource(legacySource, {
@@ -75,6 +77,9 @@ try {
   assert.equal(inferred.nodes.find((node) => node.id === "effect-5").details.source.line, 9);
   assert.equal(inferred.nodes.find((node) => node.id === "branch-2").details.code.condition, "documentType.confidence < 0.85");
   assert.match(inferred.nodes.find((node) => node.id === "branch-2").details.code.snippet, /if \(documentType\.confidence/);
+  assert.match(inferred.nodes.find((node) => node.id === "branch-2").details.plainLanguage, /Decide whether/);
+  assert.match(inferred.details.effect, /saveToDrive/);
+  assert.equal(inferred.details.example.input, "classifyAttachment(...)");
   assert.equal(inferred.nodes.find((node) => node.id === "effect-5").details.code.call, "saveToDrive");
   assert.match(inferred.nodes.find((node) => node.id === "effect-5").details.code.snippet, /const driveFile = await saveToDrive/);
 
@@ -86,6 +91,10 @@ try {
 
   assert.equal(router.edges.some((edge) => edge.from === "branch-1" && edge.to === "branch-4" && edge.label === "no"), true);
   assert.equal(router.edges.some((edge) => edge.from === "branch-15" && edge.to === "error-19" && edge.label === "no"), true);
+  assert.equal(router.nodes.find((node) => node.id === "branch-15").label, "If command is scan");
+  assert.equal(router.nodes.find((node) => node.id === "step-17").label, "Scan source file");
+  assert.match(router.details.effect, /one typed command/);
+  assert.match(router.details.example.output, /writes report.html/);
 
   const scopedContext = buildLlmContext(
     "import x from 'x';\nfunction classifyAttachment() { wantedCall(); }\nfunction unrelated() { secretCall(); }",
@@ -102,6 +111,13 @@ try {
     version: 1,
     process: {
       summary: "Classifie une piece jointe documentaire.",
+      plainLanguage: "Pour un non-dev, ce processus regarde une piece jointe et decide quoi en faire.",
+      effect: "Il transforme une piece jointe brute en statut exploitable.",
+      example: {
+        scenario: "Une famille envoie un justificatif.",
+        input: "attachment + deal",
+        output: "categorie documentaire ou REVIEW_NEEDED"
+      },
       responsibilities: ["classification documentaire"],
       flow: ["Detecter le type de document", "Envoyer en revue si la confiance est trop basse"],
       risks: ["Le scan ne suit pas encore les helpers appeles."],
@@ -138,6 +154,8 @@ try {
   assert.equal(enriched.llm.model, "mock-model");
   assert.equal(enriched.llm.cache, "miss");
   assert.equal(enriched.nodes[0].label, "Classer piece jointe 1");
+  assert.match(enriched.details.plainLanguage, /non-dev/);
+  assert.equal(enriched.details.example.output, "categorie documentaire ou REVIEW_NEEDED");
   assert.deepEqual(enriched.details.flow, ["Detecter le type de document", "Envoyer en revue si la confiance est trop basse"]);
   assert.deepEqual(enriched.details.risks, ["Le scan ne suit pas encore les helpers appeles."]);
   assert.deepEqual(enriched.edges, inferred.edges);

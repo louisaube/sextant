@@ -4,8 +4,11 @@ const allowedNodeTypes = new Set(["entry", "step", "branch", "effect", "error", 
 const allowedTopLevel = new Set(["version", "process", "nodes", "suggestedSubflows"]);
 const allowedNodeFields = new Set(["id", "label", "type", "system", "confidence", "details"]);
 const allowedCodeFields = new Set(["kind", "call", "condition", "snippet"]);
+const allowedExampleFields = new Set(["scenario", "input", "output"]);
 const allowedDetailsFields = new Set([
   "summary",
+  "plainLanguage",
+  "effect",
   "rules",
   "conditions",
   "filters",
@@ -16,7 +19,16 @@ const allowedDetailsFields = new Set([
   "confidence",
   "code"
 ]);
-const allowedProcessFields = new Set(["summary", "responsibilities", "flow", "risks", "confidence"]);
+const allowedProcessFields = new Set([
+  "summary",
+  "plainLanguage",
+  "effect",
+  "example",
+  "responsibilities",
+  "flow",
+  "risks",
+  "confidence"
+]);
 const allowedSubflowFields = new Set(["id", "label", "nodeIds", "summary"]);
 
 export function validateEnrichment(value, manifest) {
@@ -56,6 +68,12 @@ export function validateEnrichment(value, manifest) {
       if (node.details.summary !== undefined) {
         requireString(node.details.summary, `nodes[${node.id}].details.summary`);
       }
+      if (node.details.plainLanguage !== undefined) {
+        requireString(node.details.plainLanguage, `nodes[${node.id}].details.plainLanguage`);
+      }
+      if (node.details.effect !== undefined) {
+        requireString(node.details.effect, `nodes[${node.id}].details.effect`);
+      }
       if (node.details.system !== undefined) {
         requireString(node.details.system, `nodes[${node.id}].details.system`);
       }
@@ -81,6 +99,9 @@ export function validateEnrichment(value, manifest) {
     requireObject(value.process, "process");
     rejectUnknownKeys(value.process, allowedProcessFields, "process");
     if (value.process.summary !== undefined) requireString(value.process.summary, "process.summary");
+    if (value.process.plainLanguage !== undefined) requireString(value.process.plainLanguage, "process.plainLanguage");
+    if (value.process.effect !== undefined) requireString(value.process.effect, "process.effect");
+    if (value.process.example !== undefined) validateExample(value.process.example, "process.example");
     optionalStringArray(value.process.responsibilities, "process.responsibilities");
     optionalStringArray(value.process.flow, "process.flow");
     optionalStringArray(value.process.risks, "process.risks");
@@ -93,6 +114,14 @@ export function validateEnrichment(value, manifest) {
     nodes,
     suggestedSubflows
   };
+}
+
+function validateExample(value, name) {
+  requireObject(value, name);
+  rejectUnknownKeys(value, allowedExampleFields, name);
+  if (value.scenario !== undefined) requireString(value.scenario, `${name}.scenario`);
+  if (value.input !== undefined) requireString(value.input, `${name}.input`);
+  if (value.output !== undefined) requireString(value.output, `${name}.output`);
 }
 
 function validateCode(value, name) {
