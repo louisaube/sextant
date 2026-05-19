@@ -19,25 +19,6 @@ const effectWords = [
   "db"
 ];
 
-const callLabels = {
-  printHelp: "Show help to the user",
-  initProject: "Create Sextant config",
-  parseArgs: "Read command options",
-  renderFile: "Render a workflow report",
-  watchFile: "Watch and refresh report",
-  scanFile: "Scan source file",
-  writeReport: "Write HTML, Mermaid, and manifest",
-  toHtml: "Build the HTML page",
-  toMermaid: "Build the Mermaid diagram",
-  inferProcessFromSource: "Infer a process map",
-  enrichManifestWithLlm: "Recontextualize with LLM",
-  detectDocumentType: "Detect document type",
-  createReviewTask: "Create manual review task",
-  saveToDrive: "Save file to Drive",
-  updatePipedriveDeal: "Update Pipedrive deal",
-  sendClassificationEmail: "Email classification result"
-};
-
 export function inferProcessFromSource(source, options) {
   const entry = options.entry;
   const file = options.file || "unknown";
@@ -50,7 +31,6 @@ export function inferProcessFromSource(source, options) {
       label: entry,
       details: {
         summary: "Entry point inferred from existing code.",
-        plainLanguage: `This is where the ${entry} process starts.`,
         source: { file }
       }
     }
@@ -74,8 +54,6 @@ export function inferProcessFromSource(source, options) {
       label: inferred.label,
       details: {
         summary: "Inferred from source line. Retrofit mode is approximate.",
-        plainLanguage: explainNode(inferred),
-        effect: explainNodeEffect(inferred),
         conditions: inferred.condition ? [inferred.condition] : [],
         filters: [],
         rules: [],
@@ -132,10 +110,10 @@ export function inferProcessFromSource(source, options) {
       entry
     },
     details: {
-      ...explainProcess(entry, file, nodes),
-      flow: nodes.map((node) => node.details?.plainLanguage || node.label),
+      summary: `Retrofit scan of ${entry}.`,
       risks: ["Retrofit mode is approximate: review snippets and source lines before trusting the graph."]
     },
+    overlay: buildOverlay(entry, file, nodes),
     nodes,
     edges,
     subflows: []
@@ -212,7 +190,7 @@ function inferLine(line) {
     const condition = extractCondition(text);
     return {
       type: "branch",
-      label: labelDecision(condition, text),
+      label: cleanDecision(text),
       condition,
       code: {
         kind: "condition",
@@ -225,7 +203,7 @@ function inferLine(line) {
   if (/^throw\b/.test(text)) {
     return {
       type: "error",
-      label: labelError(text),
+      label: compact(text),
       code: {
         kind: "throw",
         snippet: snippet(text)
@@ -236,7 +214,7 @@ function inferLine(line) {
   if (/^return\b/.test(text)) {
     return {
       type: "return",
-      label: labelReturn(text),
+      label: compact(text),
       code: {
         kind: "return",
         snippet: snippet(text)
@@ -259,7 +237,10 @@ function inferLine(line) {
   };
 }
 
-function explainProcess(entry, file, nodes) {
+function buildOverlay(entry, file, nodes) {
+  const nodeOverlays = nodes.map((node) => explainNode(node));
+  const flow = nodeOverlays.map((node) => node.plainLanguage).filter(Boolean);
+
   if (entry === "main" && nodes.some((node) => node.details?.code?.condition?.includes("command ==="))) {
     return {
       summary: "Command-line router for Sextant.",
@@ -269,7 +250,10 @@ function explainProcess(entry, file, nodes) {
         scenario: "A user wants to inspect an existing source file.",
         input: "sextant scan examples/legacy-classify.ts --entry classifyAttachment -o report.html",
         output: "Sextant reads the file, builds a process map, and writes report.html plus the matching Mermaid and manifest files."
-      }
+      },
+      flow,
+      risks: ["The overlay explains the deterministic graph; trust the nodes, edges, snippets, and source lines first."],
+      nodes: nodeOverlays
     };
   }
 
@@ -290,68 +274,67 @@ function explainProcess(entry, file, nodes) {
       scenario: `Someone calls ${entry} from ${file}.`,
       input: `${entry}(...)`,
       output: returns.length > 0 ? returns.join(" or ") : "The process reaches the final action shown in the graph."
-    }
+    },
+    flow,
+    risks: ["The overlay is explanatory; use deterministic nodes, edges, snippets, and source lines to correct the map."],
+    nodes: nodeOverlays
   };
 }
 
-function explainNode(inferred) {
-  if (inferred.type === "branch") {
-    return `Decide whether this condition is true: ${inferred.condition}.`;
-  }
-  if (inferred.type === "effect") {
-    return `Run ${inferred.call}; this probably changes something outside the current function.`;
-  }
-  if (inferred.type === "step") {
-    return `Run ${inferred.call}; this delegates part of the work to another function.`;
-  }
-  if (inferred.type === "return") {
-    return "Stop this path and send a result back to the caller.";
-  }
-  if (inferred.type === "error") {
-    return "Stop this path by raising an error.";
-  }
-  return "Follow this step in the process.";
-}
+function explainNode(node) {
+  const code = node.details?.code || {};
 
-function explainNodeEffect(inferred) {
-  if (inferred.type === "branch") {
-    return "Chooses which path the process follows next.";
+  if (node.type === "entry") {
+    return {
+      id: node.id,
+      plainLanguage: `This is where the ${node.label} process starts.`,
+      effect: "Starts the process shown in the graph."
+    };
   }
-  if (inferred.type === "effect") {
-    return `Visible or external effect likely produced by ${inferred.call}.`;
+  if (node.type === "branch") {
+    return {
+      id: node.id,
+      plainLanguage: `Decide whether this condition is true: ${code.condition || node.label}.`,
+      effect: "Chooses which path the process follows next."
+    };
   }
-  if (inferred.type === "step") {
-    return `Moves work into ${inferred.call}.`;
+  if (node.type === "effect") {
+    return {
+      id: node.id,
+      plainLanguage: `Run ${code.call || node.label}; this probably changes something outside the current function.`,
+      effect: `Visible or external effect likely produced by ${code.call || node.label}.`
+    };
   }
-  if (inferred.type === "return") {
-    return "Ends this path.";
+  if (node.type === "step") {
+    return {
+      id: node.id,
+      plainLanguage: `Run ${code.call || node.label}; this delegates part of the work to another function.`,
+      effect: `Moves work into ${code.call || node.label}.`
+    };
   }
-  if (inferred.type === "error") {
-    return "Rejects this path as invalid or unsupported.";
+  if (node.type === "return") {
+    return {
+      id: node.id,
+      plainLanguage: "Stop this path and send a result back to the caller.",
+      effect: "Ends this path."
+    };
   }
-  return "";
+  if (node.type === "error") {
+    return {
+      id: node.id,
+      plainLanguage: "Stop this path by raising an error.",
+      effect: "Rejects this path as invalid or unsupported."
+    };
+  }
+  return {
+    id: node.id,
+    plainLanguage: "Follow this step in the process.",
+    effect: ""
+  };
 }
 
 function cleanDecision(text) {
   return compact(text.replace(/\s*\{\s*$/, ""));
-}
-
-function labelDecision(condition, text) {
-  const commandMatch = /command === ["']([^"']+)["']/.exec(condition);
-  if (commandMatch) return `If command is ${commandMatch[1]}`;
-  if (condition.includes("help") || condition.includes("--help")) return "If user asks for help";
-  if (text.startsWith("switch")) return cleanDecision(text);
-  return cleanDecision(text);
-}
-
-function labelReturn(text) {
-  if (text === "return;") return "End this path";
-  return compact(text);
-}
-
-function labelError(text) {
-  if (text.includes("Unknown command")) return "Reject unknown command";
-  return compact(text);
 }
 
 function extractCondition(text) {
@@ -375,8 +358,6 @@ function looksLikeEffect(call, text) {
 }
 
 function humanizeCall(call) {
-  if (callLabels[call]) return callLabels[call];
-
   return call
     .split(".")
     .pop()

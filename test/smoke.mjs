@@ -9,6 +9,7 @@ import {
   createMockProvider,
   enrichManifestWithLlm,
   inferProcessFromSource,
+  toHtml,
   toMermaid,
   workflow,
   step,
@@ -59,9 +60,7 @@ try {
   assert.match(html, /securityLevel: "loose"/);
   assert.match(html, /layout: "elk"/);
   assert.match(html, /sextantShowNode/);
-  assert.match(html, /Process Overview/);
-  assert.match(html, /For a non-developer/);
-  assert.match(html, /Overall Effect/);
+  assert.match(html, /Interpretive Overlay/);
 
   const legacySource = await readFile(path.join(root, "examples", "legacy-classify.ts"), "utf8");
   const inferred = inferProcessFromSource(legacySource, {
@@ -77,9 +76,13 @@ try {
   assert.equal(inferred.nodes.find((node) => node.id === "effect-5").details.source.line, 9);
   assert.equal(inferred.nodes.find((node) => node.id === "branch-2").details.code.condition, "documentType.confidence < 0.85");
   assert.match(inferred.nodes.find((node) => node.id === "branch-2").details.code.snippet, /if \(documentType\.confidence/);
-  assert.match(inferred.nodes.find((node) => node.id === "branch-2").details.plainLanguage, /Decide whether/);
-  assert.match(inferred.details.effect, /saveToDrive/);
-  assert.equal(inferred.details.example.input, "classifyAttachment(...)");
+  assert.equal(inferred.nodes.find((node) => node.id === "branch-2").details.plainLanguage, undefined);
+  assert.match(inferred.overlay.nodes.find((node) => node.id === "branch-2").plainLanguage, /Decide whether/);
+  assert.match(inferred.overlay.effect, /saveToDrive/);
+  assert.equal(inferred.overlay.example.input, "classifyAttachment(...)");
+  const inferredHtml = toHtml(inferred);
+  assert.match(inferredHtml, /For a non-developer/);
+  assert.match(inferredHtml, /Overall Effect/);
   assert.equal(inferred.nodes.find((node) => node.id === "effect-5").details.code.call, "saveToDrive");
   assert.match(inferred.nodes.find((node) => node.id === "effect-5").details.code.snippet, /const driveFile = await saveToDrive/);
 
@@ -91,10 +94,10 @@ try {
 
   assert.equal(router.edges.some((edge) => edge.from === "branch-1" && edge.to === "branch-4" && edge.label === "no"), true);
   assert.equal(router.edges.some((edge) => edge.from === "branch-15" && edge.to === "error-19" && edge.label === "no"), true);
-  assert.equal(router.nodes.find((node) => node.id === "branch-15").label, "If command is scan");
-  assert.equal(router.nodes.find((node) => node.id === "step-17").label, "Scan source file");
-  assert.match(router.details.effect, /one typed command/);
-  assert.match(router.details.example.output, /writes report.html/);
+  assert.equal(router.nodes.find((node) => node.id === "branch-15").label, "if (command === \"scan\")");
+  assert.equal(router.nodes.find((node) => node.id === "step-17").label, "Scan File");
+  assert.match(router.overlay.effect, /one typed command/);
+  assert.match(router.overlay.example.output, /writes report.html/);
 
   const scopedContext = buildLlmContext(
     "import x from 'x';\nfunction classifyAttachment() { wantedCall(); }\nfunction unrelated() { secretCall(); }",
@@ -109,9 +112,9 @@ try {
 
   const provider = createMockProvider((calls) => ({
     version: 1,
-    process: {
+    overlay: {
       summary: "Classifie une piece jointe documentaire.",
-      plainLanguage: "Pour un non-dev, ce processus regarde une piece jointe et decide quoi en faire.",
+      plainLanguage: `Pour un non-dev, ce processus regarde une piece jointe et decide quoi en faire ${calls}.`,
       effect: "Il transforme une piece jointe brute en statut exploitable.",
       example: {
         scenario: "Une famille envoie un justificatif.",
@@ -121,26 +124,23 @@ try {
       responsibilities: ["classification documentaire"],
       flow: ["Detecter le type de document", "Envoyer en revue si la confiance est trop basse"],
       risks: ["Le scan ne suit pas encore les helpers appeles."],
-      confidence: 0.9
-    },
-    nodes: [
-      {
-        id: "entry-0",
-        label: `Classer piece jointe ${calls}`,
-        details: {
+      confidence: 0.9,
+      nodes: [
+        {
+          id: "entry-0",
           summary: "Point d'entree metier enrichi par LLM.",
           responsibilities: ["classification"]
         }
-      }
-    ],
-    suggestedSubflows: [
-      {
-        id: "classification",
-        label: "Classification",
-        nodeIds: ["entry-0"],
-        summary: "Regroupe le debut du traitement documentaire."
-      }
-    ]
+      ],
+      suggestedSubflows: [
+        {
+          id: "classification",
+          label: "Classification",
+          nodeIds: ["entry-0"],
+          summary: "Regroupe le debut du traitement documentaire."
+        }
+      ]
+    }
   }));
 
   const enriched = await enrichManifestWithLlm(legacySource, inferred, {
@@ -153,11 +153,11 @@ try {
   assert.equal(enriched.llm.provider, "mock");
   assert.equal(enriched.llm.model, "mock-model");
   assert.equal(enriched.llm.cache, "miss");
-  assert.equal(enriched.nodes[0].label, "Classer piece jointe 1");
-  assert.match(enriched.details.plainLanguage, /non-dev/);
-  assert.equal(enriched.details.example.output, "categorie documentaire ou REVIEW_NEEDED");
-  assert.deepEqual(enriched.details.flow, ["Detecter le type de document", "Envoyer en revue si la confiance est trop basse"]);
-  assert.deepEqual(enriched.details.risks, ["Le scan ne suit pas encore les helpers appeles."]);
+  assert.deepEqual(enriched.nodes, inferred.nodes);
+  assert.match(enriched.overlay.plainLanguage, /non-dev/);
+  assert.equal(enriched.overlay.example.output, "categorie documentaire ou REVIEW_NEEDED");
+  assert.deepEqual(enriched.overlay.flow, ["Detecter le type de document", "Envoyer en revue si la confiance est trop basse"]);
+  assert.deepEqual(enriched.overlay.risks, ["Le scan ne suit pas encore les helpers appeles."]);
   assert.deepEqual(enriched.edges, inferred.edges);
 
   const cached = await enrichManifestWithLlm(legacySource, inferred, {
@@ -168,7 +168,7 @@ try {
   });
 
   assert.equal(cached.llm.cache, "hit");
-  assert.equal(cached.nodes[0].label, "Classer piece jointe 1");
+  assert.deepEqual(cached.nodes, inferred.nodes);
   assert.equal(provider.calls, 1);
 
   await enrichManifestWithLlm(legacySource, inferred, {
@@ -182,12 +182,14 @@ try {
   assert.equal(provider.calls, 2);
 
   const invalidProvider = createMockProvider({
-    nodes: [
-      {
-        id: "entry-0",
-        type: "banana"
-      }
-    ]
+    overlay: {
+      nodes: [
+        {
+          id: "entry-0",
+          label: "not allowed"
+        }
+      ]
+    }
   });
 
   await assert.rejects(
@@ -197,16 +199,18 @@ try {
       providerInstance: invalidProvider,
       cacheDir: path.join(tmp, "invalid-cache")
     }),
-    /known node type/
+    /not allowed/
   );
 
   const cachedInvalidProvider = createMockProvider({
-    nodes: [
-      {
-        id: "entry-0",
-        label: "Recovered"
-      }
-    ]
+    overlay: {
+      nodes: [
+        {
+          id: "entry-0",
+          plainLanguage: "Recovered"
+        }
+      ]
+    }
   });
 
   const recovered = await enrichManifestWithLlm(legacySource, inferred, {
@@ -216,7 +220,7 @@ try {
     cacheDir: path.join(tmp, "invalid-cache")
   });
 
-  assert.equal(recovered.nodes[0].label, "Recovered");
+  assert.equal(recovered.overlay.nodes.find((node) => node.id === "entry-0").plainLanguage, "Recovered");
 
   const { stderr } = await exec(process.execPath, [
     path.join(root, "src", "cli.js"),

@@ -54,23 +54,18 @@ export function createDeepSeekProvider(options = {}) {
 }
 
 function systemPrompt() {
-  return `You enrich Sextant Process Manifests.
+  return `You write an explanatory overlay for Sextant Process Manifests.
 Return ONLY valid JSON.
-Never invent nodes or edges.
-Only reference existing node ids.
-Use the code snippets, calls, conditions, and source lines from the manifest.
-Make the report concrete and operational, not abstract.
-Explain it for a smart non-developer who needs to understand the effect of the process.
-Always identify the overall effect: what changes, what is produced, or what becomes possible after this process runs.
+Never invent, rename, reorder, or delete graph nodes or edges.
+Never output node labels, node types, edge definitions, source snippets, or code fields.
+Only reference existing node ids inside overlay.nodes.
+The deterministic manifest is the source of truth. Your job is an interpretive overlay only.
+Explain the overall effect for a smart non-developer: what changes, what is produced, or what becomes possible after the process runs.
 Always include a simple input-to-output example.
-Avoid generic labels such as "Check Scan Command" or "Process Step".
-Prefer labels like "If command is scan, parse args and scan the file".
-Keep node labels short enough for a Mermaid graph.
-Do not remove deterministic details.code fields.
 Allowed shape:
 {
   "version": 1,
-  "process": {
+  "overlay": {
     "summary": "concrete summary of what the entry point does",
     "plainLanguage": "explain this process for a non-developer",
     "effect": "the overall visible or operational effect",
@@ -82,43 +77,31 @@ Allowed shape:
     "responsibilities": ["concrete responsibility"],
     "flow": ["main execution step in plain language"],
     "risks": ["concrete ambiguity, failure mode, or code-reading warning"],
-    "confidence": 0.0
-  },
-  "nodes": [
-    {
-      "id": "existing-node-id",
-      "label": "short operational label",
-      "type": "entry|step|branch|effect|error|return|subflow",
-      "system": "external system name when obvious",
-      "confidence": 0.0,
-      "details": {
-        "summary": "concrete explanation anchored in the snippet",
+    "confidence": 0.0,
+    "nodes": [
+      {
+        "id": "existing-node-id",
+        "summary": "explanation anchored in the deterministic snippet/source",
         "plainLanguage": "what this node means for a non-developer",
         "effect": "what this node changes, decides, produces, or ends",
         "rules": ["business rule"],
-        "conditions": ["condition/filter"],
-        "filters": ["filter"],
-        "inputs": ["input data"],
-        "outputs": ["output data"],
+        "conditions": ["condition/filter explanation"],
+        "filters": ["filter explanation"],
+        "inputs": ["input data explanation"],
+        "outputs": ["output data explanation"],
         "responsibilities": ["responsibility"],
         "system": "external system name when obvious",
-        "code": {
-          "kind": "call|condition|return|throw",
-          "call": "real call name when present",
-          "condition": "real condition when present",
-          "snippet": "short source snippet, max 240 chars"
-        },
         "confidence": 0.0
       }
-    }
-  ],
-  "suggestedSubflows": [
-    {
-      "id": "stable-slug",
-      "label": "Subflow label",
-      "nodeIds": ["existing-node-id"],
-      "summary": "why these nodes belong together"
-    }
-  ]
+    ],
+    "suggestedSubflows": [
+      {
+        "id": "stable-slug",
+        "label": "Subflow label",
+        "nodeIds": ["existing-node-id"],
+        "summary": "why these nodes belong together"
+      }
+    ]
+  }
 }`;
 }

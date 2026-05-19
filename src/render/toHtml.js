@@ -213,7 +213,7 @@ export function toHtml(manifest, options = {}) {
 <body>
   <header>
     <h1>${title}</h1>
-    <p>Sextant process graph. Concrete flow first, code-backed details on click.</p>
+    <p>Sextant process graph. Deterministic graph first, interpretive overlay on the side.</p>
     ${llmBadge}
   </header>
   <main>
@@ -232,6 +232,8 @@ ${escapeHtml(mermaid)}
 
     const manifest = JSON.parse(document.getElementById("sextant-manifest").textContent);
     const nodes = new Map(manifest.nodes.map((node) => [node.id, node]));
+    const overlay = manifest.overlay || {};
+    const overlayNodes = new Map((overlay.nodes || []).map((node) => [node.id, node]));
     document.getElementById("detail").innerHTML = renderOverview();
 
     window.sextantShowNode = function sextantShowNode(id) {
@@ -262,31 +264,32 @@ ${escapeHtml(mermaid)}
     });
 
     function renderOverview() {
-      const details = manifest.details || {};
       return [
-        '<div class="eyebrow">Process Overview</div>',
+        '<div class="eyebrow">Interpretive Overlay</div>',
         '<h2>' + escapeHtml(manifest.title || manifest.id || "Process") + '</h2>',
         manifest.source ? '<span class="meta">' + escapeHtml((manifest.source.mode || "process") + (manifest.source.entry ? " / " + manifest.source.entry : "")) + '</span>' : '',
-        details.plainLanguage ? '<section><h3>For a non-developer</h3><div class="explain">' + escapeHtml(details.plainLanguage) + '</div></section>' : '',
-        details.effect ? '<section><h3>Overall Effect</h3><div class="explain">' + escapeHtml(details.effect) + '</div></section>' : '',
-        example(details.example),
-        details.summary ? '<section><h3>Summary</h3><p>' + escapeHtml(details.summary) + '</p></section>' : '',
-        list("Main Flow", details.flow, false),
-        list("Responsibilities", details.responsibilities, false),
-        list("Risks", details.risks, false),
-        subflows(details.suggestedSubflows),
+        overlay.plainLanguage ? '<section><h3>For a non-developer</h3><div class="explain">' + escapeHtml(overlay.plainLanguage) + '</div></section>' : '',
+        overlay.effect ? '<section><h3>Overall Effect</h3><div class="explain">' + escapeHtml(overlay.effect) + '</div></section>' : '',
+        example(overlay.example),
+        overlay.summary ? '<section><h3>Summary</h3><p>' + escapeHtml(overlay.summary) + '</p></section>' : '',
+        list("Overlay Flow", overlay.flow, false),
+        list("Responsibilities", overlay.responsibilities, false),
+        list("Overlay Risks", overlay.risks, false),
+        list("Deterministic Warnings", manifest.details?.risks, false),
+        subflows(overlay.suggestedSubflows),
         manifest.source?.file ? '<section><h3>Source</h3><code class="source">' + escapeHtml(manifest.source.file) + '</code></section>' : ''
       ].join("");
     }
 
     function renderNode(node) {
       const details = node.details || {};
+      const nodeOverlay = overlayNodes.get(node.id) || {};
       return [
         '<div class="eyebrow">Node</div>',
         '<h2>' + escapeHtml(node.label) + '</h2>',
         '<span class="meta">' + escapeHtml(node.type) + '</span>',
-        details.plainLanguage ? '<section><h3>For a non-developer</h3><div class="explain">' + escapeHtml(details.plainLanguage) + '</div></section>' : '',
-        details.effect ? '<section><h3>Local Effect</h3><div class="explain">' + escapeHtml(details.effect) + '</div></section>' : '',
+        nodeOverlay.plainLanguage ? '<section><h3>Overlay For A Non-Developer</h3><div class="explain">' + escapeHtml(nodeOverlay.plainLanguage) + '</div></section>' : '',
+        nodeOverlay.effect ? '<section><h3>Overlay Local Effect</h3><div class="explain">' + escapeHtml(nodeOverlay.effect) + '</div></section>' : '',
         code(details.code),
         details.summary ? '<section><h3>Summary</h3><p>' + escapeHtml(details.summary) + '</p></section>' : '',
         list("Rules", details.rules, false),
@@ -294,7 +297,7 @@ ${escapeHtml(mermaid)}
         list("Filters", details.filters, true),
         list("Inputs", details.inputs, true),
         list("Outputs", details.outputs, true),
-        list("Responsibilities", details.responsibilities, false),
+        list("Overlay Responsibilities", nodeOverlay.responsibilities, false),
         source(details.source),
         node.subflow ? '<section><h3>Subflow</h3><code>' + escapeHtml(node.subflow) + '</code></section>' : ''
       ].join("");

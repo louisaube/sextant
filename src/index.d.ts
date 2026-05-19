@@ -16,8 +16,6 @@ export interface SextantSource {
 
 export interface SextantNodeDetails {
   summary?: string;
-  plainLanguage?: string;
-  effect?: string;
   rules?: string[];
   conditions?: string[];
   filters?: string[];
@@ -33,6 +31,43 @@ export interface SextantNodeDetails {
     condition?: string;
     snippet?: string;
   };
+}
+
+export interface SextantOverlayNode {
+  id: string;
+  summary?: string;
+  plainLanguage?: string;
+  effect?: string;
+  rules?: string[];
+  conditions?: string[];
+  filters?: string[];
+  inputs?: string[];
+  outputs?: string[];
+  responsibilities?: string[];
+  system?: string;
+  confidence?: number;
+}
+
+export interface SextantOverlay {
+  summary?: string;
+  plainLanguage?: string;
+  effect?: string;
+  example?: {
+    scenario?: string;
+    input?: string;
+    output?: string;
+  };
+  responsibilities?: string[];
+  flow?: string[];
+  risks?: string[];
+  confidence?: number;
+  nodes?: SextantOverlayNode[];
+  suggestedSubflows?: Array<{
+    id: string;
+    label: string;
+    nodeIds?: string[];
+    summary?: string;
+  }>;
 }
 
 export interface SextantNode {
@@ -60,24 +95,9 @@ export interface ProcessManifest {
   subflows?: ProcessManifest[];
   details?: {
     summary?: string;
-    plainLanguage?: string;
-    effect?: string;
-    example?: {
-      scenario?: string;
-      input?: string;
-      output?: string;
-    };
-    responsibilities?: string[];
-    flow?: string[];
     risks?: string[];
-    confidence?: number;
-    suggestedSubflows?: Array<{
-      id: string;
-      label: string;
-      nodeIds?: string[];
-      summary?: string;
-    }>;
   };
+  overlay?: SextantOverlay;
   llm?: {
     provider: string;
     model: string;

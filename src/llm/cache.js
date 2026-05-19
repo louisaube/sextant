@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-export const PROMPT_VERSION = "sextant-llm-v3";
+export const PROMPT_VERSION = "sextant-llm-v4";
 
 export function cacheKey(context, options) {
   return createHash("sha256")

@@ -1,6 +1,4 @@
 export function mergeEnrichment(manifest, enrichment, metadata) {
-  const enrichmentById = new Map(enrichment.nodes.map((node) => [node.id, node]));
-
   return {
     ...manifest,
     llm: {
@@ -10,48 +8,37 @@ export function mergeEnrichment(manifest, enrichment, metadata) {
       promptVersion: metadata.promptVersion,
       enriched: true
     },
-    details: {
-      ...(manifest.details || {}),
-      summary: enrichment.process.summary ?? manifest.details?.summary,
-      plainLanguage: enrichment.process.plainLanguage ?? manifest.details?.plainLanguage,
-      effect: enrichment.process.effect ?? manifest.details?.effect,
-      example: enrichment.process.example || manifest.details?.example,
-      responsibilities: enrichment.process.responsibilities || manifest.details?.responsibilities || [],
-      flow: enrichment.process.flow || manifest.details?.flow || [],
-      risks: enrichment.process.risks || manifest.details?.risks || [],
-      confidence: enrichment.process.confidence ?? manifest.details?.confidence,
-      suggestedSubflows: enrichment.suggestedSubflows || manifest.details?.suggestedSubflows || []
-    },
-    nodes: manifest.nodes.map((node) => {
-      const enriched = enrichmentById.get(node.id);
-      if (!enriched) return node;
-
-      return {
-        ...node,
-        label: enriched.label || node.label,
-        type: enriched.type || node.type,
-        system: enriched.system || node.system,
-        confidence: enriched.confidence ?? node.confidence,
-        details: mergeNodeDetails(node.details, enriched.details)
-      };
-    }),
+    overlay: mergeOverlay(manifest.overlay, enrichment.overlay),
+    nodes: manifest.nodes,
     edges: manifest.edges
   };
 }
 
-function mergeNodeDetails(current, enriched) {
-  const details = {
-    ...(current || {}),
-    ...(enriched || {})
-  };
-  const code = {
-    ...(current?.code || {}),
-    ...(enriched?.code || {})
-  };
+function mergeOverlay(current = {}, enriched = {}) {
+  const currentNodes = new Map((current.nodes || []).map((node) => [node.id, node]));
+  const enrichedNodes = new Map((enriched.nodes || []).map((node) => [node.id, node]));
+  const nodeIds = new Set([...currentNodes.keys(), ...enrichedNodes.keys()]);
 
-  if (Object.keys(code).length > 0) {
-    details.code = code;
-  }
+  return {
+    ...current,
+    ...defined({
+      summary: enriched.summary,
+      plainLanguage: enriched.plainLanguage,
+      effect: enriched.effect,
+      example: enriched.example,
+      responsibilities: enriched.responsibilities?.length ? enriched.responsibilities : undefined,
+      flow: enriched.flow?.length ? enriched.flow : undefined,
+      risks: enriched.risks?.length ? enriched.risks : undefined,
+      confidence: enriched.confidence,
+      suggestedSubflows: enriched.suggestedSubflows?.length ? enriched.suggestedSubflows : undefined
+    }),
+    nodes: [...nodeIds].map((id) => ({
+      ...(currentNodes.get(id) || {}),
+      ...(enrichedNodes.get(id) || {})
+    }))
+  };
+}
 
-  return details;
+function defined(value) {
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined));
 }

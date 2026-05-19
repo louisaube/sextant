@@ -1,11 +1,20 @@
-const detailArrays = ["rules", "conditions", "filters", "inputs", "outputs", "responsibilities"];
-const allowedCodeKinds = new Set(["call", "condition", "return", "throw"]);
-const allowedNodeTypes = new Set(["entry", "step", "branch", "effect", "error", "return", "subflow"]);
-const allowedTopLevel = new Set(["version", "process", "nodes", "suggestedSubflows"]);
-const allowedNodeFields = new Set(["id", "label", "type", "system", "confidence", "details"]);
-const allowedCodeFields = new Set(["kind", "call", "condition", "snippet"]);
-const allowedExampleFields = new Set(["scenario", "input", "output"]);
-const allowedDetailsFields = new Set([
+const overlayArrays = ["responsibilities", "flow", "risks"];
+const overlayNodeArrays = ["rules", "conditions", "filters", "inputs", "outputs", "responsibilities"];
+const allowedTopLevel = new Set(["version", "overlay"]);
+const allowedOverlayFields = new Set([
+  "summary",
+  "plainLanguage",
+  "effect",
+  "example",
+  "responsibilities",
+  "flow",
+  "risks",
+  "confidence",
+  "nodes",
+  "suggestedSubflows"
+]);
+const allowedOverlayNodeFields = new Set([
+  "id",
   "summary",
   "plainLanguage",
   "effect",
@@ -16,19 +25,9 @@ const allowedDetailsFields = new Set([
   "outputs",
   "responsibilities",
   "system",
-  "confidence",
-  "code"
-]);
-const allowedProcessFields = new Set([
-  "summary",
-  "plainLanguage",
-  "effect",
-  "example",
-  "responsibilities",
-  "flow",
-  "risks",
   "confidence"
 ]);
+const allowedExampleFields = new Set(["scenario", "input", "output"]);
 const allowedSubflowFields = new Set(["id", "label", "nodeIds", "summary"]);
 
 export function validateEnrichment(value, manifest) {
@@ -37,82 +36,64 @@ export function validateEnrichment(value, manifest) {
   }
   rejectUnknownKeys(value, allowedTopLevel, "root");
 
+  const overlay = value.overlay || {};
+  requireObject(overlay, "overlay");
+  rejectUnknownKeys(overlay, allowedOverlayFields, "overlay");
+
   const knownNodeIds = new Set(manifest.nodes.map((node) => node.id));
-  const nodes = optionalArray(value.nodes, "nodes");
-  const suggestedSubflows = optionalArray(value.suggestedSubflows, "suggestedSubflows");
+  const nodes = optionalArray(overlay.nodes, "overlay.nodes");
+  const suggestedSubflows = optionalArray(overlay.suggestedSubflows, "overlay.suggestedSubflows");
+
+  if (overlay.summary !== undefined) requireString(overlay.summary, "overlay.summary");
+  if (overlay.plainLanguage !== undefined) requireString(overlay.plainLanguage, "overlay.plainLanguage");
+  if (overlay.effect !== undefined) requireString(overlay.effect, "overlay.effect");
+  if (overlay.example !== undefined) validateExample(overlay.example, "overlay.example");
+  for (const key of overlayArrays) {
+    optionalStringArray(overlay[key], `overlay.${key}`);
+  }
+  if (overlay.confidence !== undefined) requireNumber(overlay.confidence, "overlay.confidence");
 
   for (const node of nodes) {
-    requireObject(node, "nodes[]");
-    rejectUnknownKeys(node, allowedNodeFields, "nodes[]");
-    requireString(node.id, "nodes[].id");
+    requireObject(node, "overlay.nodes[]");
+    rejectUnknownKeys(node, allowedOverlayNodeFields, "overlay.nodes[]");
+    requireString(node.id, "overlay.nodes[].id");
     if (!knownNodeIds.has(node.id)) {
-      throw new Error(`LLM enrichment referenced unknown node id "${node.id}".`);
+      throw new Error(`LLM overlay referenced unknown node id "${node.id}".`);
     }
 
-    if (node.label !== undefined) requireString(node.label, `nodes[${node.id}].label`);
-    if (node.type !== undefined) {
-      requireString(node.type, `nodes[${node.id}].type`);
-      if (!allowedNodeTypes.has(node.type)) {
-        throw new Error(`LLM enrichment field "nodes[${node.id}].type" must be a known node type.`);
-      }
-    }
-    if (node.system !== undefined) requireString(node.system, `nodes[${node.id}].system`);
-    if (node.confidence !== undefined) requireNumber(node.confidence, `nodes[${node.id}].confidence`);
-
-    if (node.details !== undefined) {
-      requireObject(node.details, `nodes[${node.id}].details`);
-      rejectUnknownKeys(node.details, allowedDetailsFields, `nodes[${node.id}].details`);
-      for (const key of detailArrays) {
-        optionalStringArray(node.details[key], `nodes[${node.id}].details.${key}`);
-      }
-      if (node.details.summary !== undefined) {
-        requireString(node.details.summary, `nodes[${node.id}].details.summary`);
-      }
-      if (node.details.plainLanguage !== undefined) {
-        requireString(node.details.plainLanguage, `nodes[${node.id}].details.plainLanguage`);
-      }
-      if (node.details.effect !== undefined) {
-        requireString(node.details.effect, `nodes[${node.id}].details.effect`);
-      }
-      if (node.details.system !== undefined) {
-        requireString(node.details.system, `nodes[${node.id}].details.system`);
-      }
-      if (node.details.confidence !== undefined) {
-        requireNumber(node.details.confidence, `nodes[${node.id}].details.confidence`);
-      }
-      if (node.details.code !== undefined) {
-        validateCode(node.details.code, `nodes[${node.id}].details.code`);
-      }
+    if (node.summary !== undefined) requireString(node.summary, `overlay.nodes[${node.id}].summary`);
+    if (node.plainLanguage !== undefined) requireString(node.plainLanguage, `overlay.nodes[${node.id}].plainLanguage`);
+    if (node.effect !== undefined) requireString(node.effect, `overlay.nodes[${node.id}].effect`);
+    if (node.system !== undefined) requireString(node.system, `overlay.nodes[${node.id}].system`);
+    if (node.confidence !== undefined) requireNumber(node.confidence, `overlay.nodes[${node.id}].confidence`);
+    for (const key of overlayNodeArrays) {
+      optionalStringArray(node[key], `overlay.nodes[${node.id}].${key}`);
     }
   }
 
   for (const subflow of suggestedSubflows) {
-    requireObject(subflow, "suggestedSubflows[]");
-    rejectUnknownKeys(subflow, allowedSubflowFields, "suggestedSubflows[]");
-    requireString(subflow.id, "suggestedSubflows[].id");
-    requireString(subflow.label, "suggestedSubflows[].label");
-    optionalStringArray(subflow.nodeIds, `suggestedSubflows[${subflow.id}].nodeIds`);
-    if (subflow.summary !== undefined) requireString(subflow.summary, `suggestedSubflows[${subflow.id}].summary`);
-  }
-
-  if (value.process !== undefined) {
-    requireObject(value.process, "process");
-    rejectUnknownKeys(value.process, allowedProcessFields, "process");
-    if (value.process.summary !== undefined) requireString(value.process.summary, "process.summary");
-    if (value.process.plainLanguage !== undefined) requireString(value.process.plainLanguage, "process.plainLanguage");
-    if (value.process.effect !== undefined) requireString(value.process.effect, "process.effect");
-    if (value.process.example !== undefined) validateExample(value.process.example, "process.example");
-    optionalStringArray(value.process.responsibilities, "process.responsibilities");
-    optionalStringArray(value.process.flow, "process.flow");
-    optionalStringArray(value.process.risks, "process.risks");
-    if (value.process.confidence !== undefined) requireNumber(value.process.confidence, "process.confidence");
+    requireObject(subflow, "overlay.suggestedSubflows[]");
+    rejectUnknownKeys(subflow, allowedSubflowFields, "overlay.suggestedSubflows[]");
+    requireString(subflow.id, "overlay.suggestedSubflows[].id");
+    requireString(subflow.label, "overlay.suggestedSubflows[].label");
+    optionalStringArray(subflow.nodeIds, `overlay.suggestedSubflows[${subflow.id}].nodeIds`);
+    if (subflow.summary !== undefined) requireString(subflow.summary, `overlay.suggestedSubflows[${subflow.id}].summary`);
   }
 
   return {
     version: value.version || 1,
-    process: value.process || {},
-    nodes,
-    suggestedSubflows
+    overlay: {
+      summary: overlay.summary,
+      plainLanguage: overlay.plainLanguage,
+      effect: overlay.effect,
+      example: overlay.example,
+      responsibilities: overlay.responsibilities || [],
+      flow: overlay.flow || [],
+      risks: overlay.risks || [],
+      confidence: overlay.confidence,
+      nodes,
+      suggestedSubflows
+    }
   };
 }
 
@@ -122,20 +103,6 @@ function validateExample(value, name) {
   if (value.scenario !== undefined) requireString(value.scenario, `${name}.scenario`);
   if (value.input !== undefined) requireString(value.input, `${name}.input`);
   if (value.output !== undefined) requireString(value.output, `${name}.output`);
-}
-
-function validateCode(value, name) {
-  requireObject(value, name);
-  rejectUnknownKeys(value, allowedCodeFields, name);
-  if (value.kind !== undefined) {
-    requireString(value.kind, `${name}.kind`);
-    if (!allowedCodeKinds.has(value.kind)) {
-      throw new Error(`LLM enrichment field "${name}.kind" must be a known code kind.`);
-    }
-  }
-  if (value.call !== undefined) requireString(value.call, `${name}.call`);
-  if (value.condition !== undefined) requireString(value.condition, `${name}.condition`);
-  if (value.snippet !== undefined) requireString(value.snippet, `${name}.snippet`);
 }
 
 function optionalArray(value, name) {
