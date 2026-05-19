@@ -36,7 +36,12 @@ export function inferProcessFromSource(source, options) {
     }
   ];
   const edges = [];
-  let previous = nodes[0].id;
+  let previous = {
+    id: nodes[0].id,
+    type: nodes[0].type,
+    depth: -1
+  };
+  let pendingFalseEdges = [];
   let index = 1;
 
   for (const line of lines) {
@@ -62,10 +67,36 @@ export function inferProcessFromSource(source, options) {
     };
 
     nodes.push(node);
+
+    const falseEdges = pendingFalseEdges.filter((edge) => line.depth <= edge.depth);
+    pendingFalseEdges = pendingFalseEdges.filter((edge) => line.depth > edge.depth);
+
     if (previous) {
-      edges.push({ from: previous, to: node.id });
+      edges.push({
+        from: previous.id,
+        to: node.id,
+        ...(previous.type === "branch" && line.depth > previous.depth ? { label: "yes" } : {})
+      });
     }
-    previous = isTerminal(inferred.type) ? null : node.id;
+
+    for (const edge of falseEdges) {
+      edges.push({ from: edge.from, to: node.id, label: "no" });
+    }
+
+    if (inferred.type === "branch") {
+      pendingFalseEdges.push({
+        from: node.id,
+        depth: line.depth
+      });
+    }
+
+    previous = isTerminal(inferred.type)
+      ? null
+      : {
+          id: node.id,
+          type: inferred.type,
+          depth: line.depth
+        };
     index++;
   }
 
@@ -117,13 +148,29 @@ function extractFunctionBody(source, entry) {
 }
 
 function usefulLines(body, startLine) {
-  return body
-    .split(/\r?\n/)
-    .map((text, offset) => ({
+  const lines = [];
+  let depth = 0;
+
+  body.split(/\r?\n/).forEach((rawText, offset) => {
+    const trimmed = rawText.replace(/\/\/.*$/, "").trim();
+    const leadingClose = trimmed.match(/^\}+/)?.[0].length || 0;
+    const lineDepth = Math.max(0, depth - leadingClose);
+    const text = trimmed.replace(/^\}\s*/, "");
+    const openCount = countChar(trimmed, "{");
+    const closeCount = countChar(trimmed, "}");
+
+    depth = Math.max(0, depth + openCount - closeCount);
+
+    if (!text || text === "{" || text === "}") return;
+
+    lines.push({
       number: startLine + offset,
-      text: text.replace(/\/\/.*$/, "").trim()
-    }))
-    .filter((line) => line.text && line.text !== "{" && line.text !== "}");
+      text,
+      depth: lineDepth
+    });
+  });
+
+  return lines;
 }
 
 function isTerminal(type) {
@@ -195,4 +242,8 @@ function escapeRegExp(value) {
 
 function lineNumberAt(source, index) {
   return source.slice(0, index).split(/\r?\n/).length;
+}
+
+function countChar(value, char) {
+  return [...value].filter((item) => item === char).length;
 }

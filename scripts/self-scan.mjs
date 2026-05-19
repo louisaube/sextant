@@ -7,6 +7,12 @@ const root = path.resolve(import.meta.dirname, "..");
 const cli = path.join(root, "src", "cli.js");
 const extraArgs = process.argv.slice(2);
 
+if (extraArgs.includes("--llm") && !process.env.DEEPSEEK_API_KEY) {
+  console.error("sextant self-scan --llm requires DEEPSEEK_API_KEY.");
+  console.error("Set the key in the current shell, then run: npm run self:scan -- --llm");
+  process.exit(1);
+}
+
 const scans = [
   {
     label: "CLI command router",
@@ -40,9 +46,15 @@ for (const scan of scans) {
     path.join(root, scan.output)
   ];
 
-  await exec(process.execPath, args, {
-    cwd: root
-  });
+  try {
+    await exec(process.execPath, args, {
+      cwd: root
+    });
+  } catch (error) {
+    if (error.stdout) process.stdout.write(error.stdout);
+    if (error.stderr) process.stderr.write(error.stderr);
+    process.exit(error.code || 1);
+  }
 
   console.log(`${scan.label}: ${scan.output}`);
 }

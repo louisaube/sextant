@@ -70,7 +70,17 @@ try {
   assert.equal(inferred.nodes.some((node) => node.type === "branch"), true);
   assert.equal(inferred.nodes.some((node) => node.type === "effect"), true);
   assert.equal(inferred.edges.some((edge) => edge.from === "return-4" && edge.to === "effect-5"), false);
+  assert.equal(inferred.edges.some((edge) => edge.from === "branch-2" && edge.to === "effect-5" && edge.label === "no"), true);
   assert.equal(inferred.nodes.find((node) => node.id === "effect-5").details.source.line, 9);
+
+  const routerSource = await readFile(path.join(root, "src", "cli.js"), "utf8");
+  const router = inferProcessFromSource(routerSource, {
+    entry: "main",
+    file: "src/cli.js"
+  });
+
+  assert.equal(router.edges.some((edge) => edge.from === "branch-1" && edge.to === "branch-4" && edge.label === "no"), true);
+  assert.equal(router.edges.some((edge) => edge.from === "branch-15" && edge.to === "error-19" && edge.label === "no"), true);
 
   const scopedContext = buildLlmContext(
     "import x from 'x';\nfunction classifyAttachment() { wantedCall(); }\nfunction unrelated() { secretCall(); }",
