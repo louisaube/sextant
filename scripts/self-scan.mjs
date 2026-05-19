@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 const exec = promisify(execFile);
 const root = path.resolve(import.meta.dirname, "..");
 const cli = path.join(root, "src", "cli.js");
+const extraArgs = process.argv.slice(2);
 
 const scans = [
   {
@@ -34,6 +35,7 @@ for (const scan of scans) {
     path.join(root, scan.file),
     "--entry",
     scan.entry,
+    ...extraArgs,
     "-o",
     path.join(root, scan.output)
   ];

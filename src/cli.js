@@ -5,6 +5,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { getCurrentWorkflow } from "./index.js";
+import { enrichManifestWithLlm } from "./llm/index.js";
 import { inferProcessFromSource } from "./scan/inferProcess.js";
 import { writeReport } from "./render/writeReport.js";
 
@@ -116,7 +117,19 @@ async function scanFile(args) {
 
   const file = path.resolve(input);
   const source = await readFile(file, "utf8");
-  const manifest = inferProcessFromSource(source, { entry, file });
+  let manifest = inferProcessFromSource(source, { entry, file });
+
+  if (args.llm) {
+    manifest = await enrichManifestWithLlm(source, manifest, {
+      entry,
+      file,
+      provider: args.provider || "deepseek",
+      model: args.model || "deepseek-chat",
+      cache: args.cache !== false,
+      cacheDir: args["cache-dir"]
+    });
+  }
+
   const output = args.o || args.output || defaultOutput(input);
   const files = await writeReport(manifest, output);
   console.log(`wrote ${files.html}`);
@@ -175,6 +188,7 @@ function isManifest(value) {
 
 function parseArgs(argv) {
   const parsed = { _: [] };
+  const booleanFlags = new Set(["llm", "no-cache"]);
 
   for (let index = 0; index < argv.length; index++) {
     const value = argv[index];
@@ -183,6 +197,10 @@ function parseArgs(argv) {
       parsed.o = parsed.output;
     } else if (value === "--entry" || value === "--function") {
       parsed.entry = argv[++index];
+    } else if (value === "--no-cache") {
+      parsed.cache = false;
+    } else if (booleanFlags.has(value.slice(2))) {
+      parsed[value.slice(2)] = true;
     } else if (value.startsWith("--")) {
       parsed[value.slice(2)] = argv[++index] || true;
     } else {
@@ -206,5 +224,6 @@ Usage:
   sextant render <workflow.ts|workflow.js> -o <report.html>
   sextant watch <workflow.ts|workflow.js> -o <report.html>
   sextant scan <file.ts|file.js> --entry <name> -o <report.html>
+  sextant scan <file.ts|file.js> --entry <name> --llm --provider deepseek --model deepseek-chat
 `);
 }

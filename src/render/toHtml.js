@@ -4,6 +4,9 @@ export function toHtml(manifest, options = {}) {
   const mermaid = options.mermaid || toMermaid(manifest);
   const title = escapeHtml(manifest.title || manifest.id || "Sextant");
   const manifestJson = JSON.stringify(manifest).replace(/</g, "\\u003c");
+  const llmBadge = manifest.llm?.enriched
+    ? `<span class="badge">LLM enriched · ${escapeHtml(manifest.llm.provider)} · ${escapeHtml(manifest.llm.model)} · cache ${escapeHtml(manifest.llm.cache)}</span>`
+    : "";
 
   return `<!doctype html>
 <html lang="en">
@@ -51,6 +54,20 @@ export function toHtml(manifest, options = {}) {
       margin: 6px 0 0;
       color: var(--muted);
       font-size: 13px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      margin-top: 10px;
+      padding: 4px 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--accent-soft);
+      color: #5d3611;
+      font-size: 12px;
+      font-weight: 700;
     }
 
     main {
@@ -151,6 +168,7 @@ export function toHtml(manifest, options = {}) {
   <header>
     <h1>${title}</h1>
     <p>Sextant process graph. Macro first, details on click.</p>
+    ${llmBadge}
   </header>
   <main>
     <div class="graph">

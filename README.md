@@ -23,6 +23,7 @@ Puis ouvrir `examples/inscription.html`.
 npx sextant render src/workflows/inscription.workflow.ts -o inscription.html
 npx sextant watch src/workflows/inscription.workflow.ts -o inscription.html
 npx sextant scan src/docagent/index.ts --entry processIncomingAttachment -o docagent.html
+npx sextant scan src/docagent/index.ts --entry processIncomingAttachment --llm -o docagent.html
 ```
 
 Package npm : `@louis/sextant`.
@@ -32,11 +33,30 @@ Le nom non-scope `sextant` est deja pris sur npm, mais le binaire expose reste `
 import { workflow, step, branch, effect } from "@louis/sextant";
 ```
 
+## LLM scan enrichment
+
+LLM enrichment is opt-in and uses DeepSeek by default because it is cheap.
+The LLM enriches the heuristic Manifest; it does not replace deterministic extraction.
+
+```bash
+set DEEPSEEK_API_KEY=...
+npx sextant scan src/docagent/index.ts --entry processIncomingAttachment --llm
+```
+
+Options:
+
+```bash
+--provider deepseek
+--model deepseek-chat
+--no-cache
+```
+
 ## Verification package
 
 ```bash
 npm test
 npm run pack:smoke
+npm run self:scan -- --llm
 ```
 
 Phrase produit :

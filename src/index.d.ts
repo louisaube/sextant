@@ -21,6 +21,9 @@ export interface SextantNodeDetails {
   filters?: string[];
   inputs?: string[];
   outputs?: string[];
+  responsibilities?: string[];
+  system?: string;
+  confidence?: number;
   source?: SextantSource;
 }
 
@@ -30,6 +33,8 @@ export interface SextantNode {
   label: string;
   details?: SextantNodeDetails;
   subflow?: string;
+  system?: string;
+  confidence?: number;
 }
 
 export interface SextantEdge {
@@ -45,6 +50,24 @@ export interface ProcessManifest {
   nodes: SextantNode[];
   edges: SextantEdge[];
   subflows?: ProcessManifest[];
+  details?: {
+    summary?: string;
+    responsibilities?: string[];
+    confidence?: number;
+    suggestedSubflows?: Array<{
+      id: string;
+      label: string;
+      nodeIds?: string[];
+      summary?: string;
+    }>;
+  };
+  llm?: {
+    provider: string;
+    model: string;
+    cache: "hit" | "miss";
+    promptVersion: string;
+    enriched: boolean;
+  };
 }
 
 export interface WorkflowOptions {
@@ -95,6 +118,33 @@ export declare function inferProcessFromSource(
   source: string,
   options: { entry: string; file?: string }
 ): ProcessManifest;
+
+export interface LlmProvider {
+  name: string;
+  enrichProcess(context: unknown, options?: { model?: string }): Promise<unknown>;
+}
+
+export declare function enrichManifestWithLlm(
+  source: string,
+  manifest: ProcessManifest,
+  options?: {
+    entry?: string;
+    file?: string;
+    provider?: "deepseek" | string;
+    model?: string;
+    cache?: boolean;
+    cacheDir?: string;
+    providerInstance?: LlmProvider;
+  }
+): Promise<ProcessManifest>;
+
+export declare function buildLlmContext(
+  source: string,
+  manifest: ProcessManifest,
+  options: { entry?: string; file?: string }
+): unknown;
+
+export declare function createMockProvider(enrichment: unknown): LlmProvider & { readonly calls: number };
 
 export declare function toMermaid(manifest: ProcessManifest): string;
 export declare function toHtml(manifest: ProcessManifest, options?: { mermaid?: string }): string;

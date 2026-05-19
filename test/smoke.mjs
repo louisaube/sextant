@@ -4,7 +4,16 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { inferProcessFromSource, toMermaid, workflow, step, branch, effect } from "../src/index.js";
+import {
+  createMockProvider,
+  enrichManifestWithLlm,
+  inferProcessFromSource,
+  toMermaid,
+  workflow,
+  step,
+  branch,
+  effect
+} from "../src/index.js";
 
 const exec = promisify(execFile);
 const root = path.resolve(import.meta.dirname, "..");
@@ -59,6 +68,88 @@ try {
   assert.equal(inferred.source.mode, "scan");
   assert.equal(inferred.nodes.some((node) => node.type === "branch"), true);
   assert.equal(inferred.nodes.some((node) => node.type === "effect"), true);
+
+  const provider = createMockProvider((calls) => ({
+    version: 1,
+    process: {
+      summary: "Classifie une piece jointe documentaire.",
+      responsibilities: ["classification documentaire"],
+      confidence: 0.9
+    },
+    nodes: [
+      {
+        id: "entry-0",
+        label: `Classer piece jointe ${calls}`,
+        details: {
+          summary: "Point d'entree metier enrichi par LLM.",
+          responsibilities: ["classification"]
+        }
+      }
+    ],
+    suggestedSubflows: [
+      {
+        id: "classification",
+        label: "Classification",
+        nodeIds: ["entry-0"],
+        summary: "Regroupe le debut du traitement documentaire."
+      }
+    ]
+  }));
+
+  const enriched = await enrichManifestWithLlm(legacySource, inferred, {
+    provider: "mock",
+    model: "mock-model",
+    providerInstance: provider,
+    cacheDir: path.join(tmp, "llm-cache")
+  });
+
+  assert.equal(enriched.llm.provider, "mock");
+  assert.equal(enriched.llm.model, "mock-model");
+  assert.equal(enriched.llm.cache, "miss");
+  assert.equal(enriched.nodes[0].label, "Classer piece jointe 1");
+  assert.deepEqual(enriched.edges, inferred.edges);
+
+  const cached = await enrichManifestWithLlm(legacySource, inferred, {
+    provider: "mock",
+    model: "mock-model",
+    providerInstance: provider,
+    cacheDir: path.join(tmp, "llm-cache")
+  });
+
+  assert.equal(cached.llm.cache, "hit");
+  assert.equal(cached.nodes[0].label, "Classer piece jointe 1");
+  assert.equal(provider.calls, 1);
+
+  await enrichManifestWithLlm(legacySource, inferred, {
+    provider: "mock",
+    model: "mock-model",
+    providerInstance: provider,
+    cache: false,
+    cacheDir: path.join(tmp, "llm-cache")
+  });
+
+  assert.equal(provider.calls, 2);
+
+  const { stderr } = await exec(process.execPath, [
+    path.join(root, "src", "cli.js"),
+    "scan",
+    path.join(root, "examples", "legacy-classify.ts"),
+    "--entry",
+    "classifyAttachment",
+    "--llm",
+    "-o",
+    path.join(tmp, "llm.html")
+  ], {
+    env: {
+      ...process.env,
+      DEEPSEEK_API_KEY: ""
+    }
+  }).then(
+    () => ({ stderr: "" }),
+    (error) => ({ stderr: error.stderr || "" })
+  );
+
+  assert.match(stderr, /DEEPSEEK_API_KEY/);
 
   console.log("smoke ok");
 } finally {

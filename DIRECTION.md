@@ -269,6 +269,14 @@ V0 reste volontairement legere :
 Mermaid + ELK est le premier pari.
 React Flow ne vient que si Mermaid + hierarchie stricte ne suffit plus.
 
+Le mode scan peut recevoir un enrichissement LLM opt-in :
+
+- provider abstrait ;
+- DeepSeek en premier adapter ;
+- cle via `DEEPSEEK_API_KEY` uniquement ;
+- cache local dans `.sextant-cache/llm` ;
+- le LLM enrichit le Process Manifest, mais ne remplace pas l'extraction deterministe.
+
 ## 9. Roadmap
 
 ### V0.x
