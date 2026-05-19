@@ -89,6 +89,7 @@ export interface SextantEdge {
 export interface ProcessManifest {
   id: string;
   title: string;
+  language?: "en" | "fr";
   source?: SextantSource;
   nodes: SextantNode[];
   edges: SextantEdge[];
@@ -153,7 +154,7 @@ export declare function getCurrentWorkflow(): ProcessManifest | null;
 
 export declare function inferProcessFromSource(
   source: string,
-  options: { entry: string; file?: string }
+  options: { entry: string; file?: string; language?: "en" | "fr"; lang?: "en" | "fr" }
 ): ProcessManifest;
 
 export interface LlmProvider {
@@ -167,6 +168,7 @@ export declare function enrichManifestWithLlm(
   options?: {
     entry?: string;
     file?: string;
+    language?: "en" | "fr";
     provider?: "deepseek" | string;
     model?: string;
     cache?: boolean;

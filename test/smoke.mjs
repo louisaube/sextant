@@ -86,6 +86,18 @@ try {
   assert.equal(inferred.nodes.find((node) => node.id === "effect-5").details.code.call, "saveToDrive");
   assert.match(inferred.nodes.find((node) => node.id === "effect-5").details.code.snippet, /const driveFile = await saveToDrive/);
 
+  const inferredFr = inferProcessFromSource(legacySource, {
+    entry: "classifyAttachment",
+    file: "examples/legacy-classify.ts",
+    language: "fr"
+  });
+  const inferredFrHtml = toHtml(inferredFr);
+  assert.equal(inferredFr.language, "fr");
+  assert.match(inferredFr.overlay.plainLanguage, /Cette carte/);
+  assert.match(inferredFrHtml, /<html lang="fr">/);
+  assert.match(inferredFrHtml, /Surcouche explicative/);
+  assert.match(inferredFrHtml, /Effet global/);
+
   const routerSource = await readFile(path.join(root, "src", "cli.js"), "utf8");
   const router = inferProcessFromSource(routerSource, {
     entry: "main",

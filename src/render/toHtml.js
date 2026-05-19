@@ -1,7 +1,74 @@
 import { toMermaid } from "./toMermaid.js";
 
+const copy = {
+  en: {
+    tagline: "Sextant process graph. Deterministic graph first, interpretive overlay on the side.",
+    overlay: "Interpretive Overlay",
+    forNonDeveloper: "For a non-developer",
+    overallEffect: "Overall Effect",
+    summary: "Summary",
+    overlayFlow: "Overlay Flow",
+    responsibilities: "Responsibilities",
+    overlayRisks: "Overlay Risks",
+    deterministicWarnings: "Deterministic Warnings",
+    source: "Source",
+    node: "Node",
+    nodeOverlay: "Overlay For A Non-Developer",
+    localEffect: "Overlay Local Effect",
+    rules: "Rules",
+    conditions: "Conditions",
+    filters: "Filters",
+    inputs: "Inputs",
+    outputs: "Outputs",
+    overlayResponsibilities: "Overlay Responsibilities",
+    subflow: "Subflow",
+    codeKind: "Code Kind",
+    call: "Call",
+    condition: "Condition",
+    snippet: "Snippet",
+    suggestedSubflows: "Suggested Subflows",
+    example: "Example",
+    scenario: "Scenario",
+    exampleInput: "Input",
+    exampleOutput: "Output"
+  },
+  fr: {
+    tagline: "Graphe de processus Sextant. Graphe deterministe d'abord, surcouche explicative sur le cote.",
+    overlay: "Surcouche explicative",
+    forNonDeveloper: "Pour non-developpeur",
+    overallEffect: "Effet global",
+    summary: "Resume",
+    overlayFlow: "Lecture expliquee",
+    responsibilities: "Responsabilites",
+    overlayRisks: "Risques de lecture",
+    deterministicWarnings: "Alertes deterministes",
+    source: "Source",
+    node: "Noeud",
+    nodeOverlay: "Explication du noeud",
+    localEffect: "Effet local explique",
+    rules: "Regles",
+    conditions: "Conditions",
+    filters: "Filtres",
+    inputs: "Entrees",
+    outputs: "Sorties",
+    overlayResponsibilities: "Responsabilites expliquees",
+    subflow: "Sous-flow",
+    codeKind: "Type de code",
+    call: "Appel",
+    condition: "Condition",
+    snippet: "Extrait",
+    suggestedSubflows: "Sous-flows suggeres",
+    example: "Exemple",
+    scenario: "Scenario",
+    exampleInput: "Entree",
+    exampleOutput: "Sortie"
+  }
+};
+
 export function toHtml(manifest, options = {}) {
   const mermaid = options.mermaid || toMermaid(manifest);
+  const language = manifest.language === "fr" ? "fr" : "en";
+  const text = copy[language];
   const title = escapeHtml(manifest.title || manifest.id || "Sextant");
   const manifestJson = JSON.stringify(manifest).replace(/</g, "\\u003c");
   const llmBadge = manifest.llm?.enriched
@@ -9,7 +76,7 @@ export function toHtml(manifest, options = {}) {
     : "";
 
   return `<!doctype html>
-<html lang="en">
+<html lang="${language}">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -213,7 +280,7 @@ export function toHtml(manifest, options = {}) {
 <body>
   <header>
     <h1>${title}</h1>
-    <p>Sextant process graph. Deterministic graph first, interpretive overlay on the side.</p>
+    <p>${text.tagline}</p>
     ${llmBadge}
   </header>
   <main>
@@ -231,6 +298,7 @@ ${escapeHtml(mermaid)}
     import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
 
     const manifest = JSON.parse(document.getElementById("sextant-manifest").textContent);
+    const text = ${JSON.stringify(text).replace(/</g, "\\u003c")};
     const nodes = new Map(manifest.nodes.map((node) => [node.id, node]));
     const overlay = manifest.overlay || {};
     const overlayNodes = new Map((overlay.nodes || []).map((node) => [node.id, node]));
@@ -265,19 +333,19 @@ ${escapeHtml(mermaid)}
 
     function renderOverview() {
       return [
-        '<div class="eyebrow">Interpretive Overlay</div>',
+        '<div class="eyebrow">' + text.overlay + '</div>',
         '<h2>' + escapeHtml(manifest.title || manifest.id || "Process") + '</h2>',
         manifest.source ? '<span class="meta">' + escapeHtml((manifest.source.mode || "process") + (manifest.source.entry ? " / " + manifest.source.entry : "")) + '</span>' : '',
-        overlay.plainLanguage ? '<section><h3>For a non-developer</h3><div class="explain">' + escapeHtml(overlay.plainLanguage) + '</div></section>' : '',
-        overlay.effect ? '<section><h3>Overall Effect</h3><div class="explain">' + escapeHtml(overlay.effect) + '</div></section>' : '',
+        overlay.plainLanguage ? '<section><h3>' + text.forNonDeveloper + '</h3><div class="explain">' + escapeHtml(overlay.plainLanguage) + '</div></section>' : '',
+        overlay.effect ? '<section><h3>' + text.overallEffect + '</h3><div class="explain">' + escapeHtml(overlay.effect) + '</div></section>' : '',
         example(overlay.example),
-        overlay.summary ? '<section><h3>Summary</h3><p>' + escapeHtml(overlay.summary) + '</p></section>' : '',
-        list("Overlay Flow", overlay.flow, false),
-        list("Responsibilities", overlay.responsibilities, false),
-        list("Overlay Risks", overlay.risks, false),
-        list("Deterministic Warnings", manifest.details?.risks, false),
+        overlay.summary ? '<section><h3>' + text.summary + '</h3><p>' + escapeHtml(overlay.summary) + '</p></section>' : '',
+        list(text.overlayFlow, overlay.flow, false),
+        list(text.responsibilities, overlay.responsibilities, false),
+        list(text.overlayRisks, overlay.risks, false),
+        list(text.deterministicWarnings, manifest.details?.risks, false),
         subflows(overlay.suggestedSubflows),
-        manifest.source?.file ? '<section><h3>Source</h3><code class="source">' + escapeHtml(manifest.source.file) + '</code></section>' : ''
+        manifest.source?.file ? '<section><h3>' + text.source + '</h3><code class="source">' + escapeHtml(manifest.source.file) + '</code></section>' : ''
       ].join("");
     }
 
@@ -285,21 +353,21 @@ ${escapeHtml(mermaid)}
       const details = node.details || {};
       const nodeOverlay = overlayNodes.get(node.id) || {};
       return [
-        '<div class="eyebrow">Node</div>',
+        '<div class="eyebrow">' + text.node + '</div>',
         '<h2>' + escapeHtml(node.label) + '</h2>',
         '<span class="meta">' + escapeHtml(node.type) + '</span>',
-        nodeOverlay.plainLanguage ? '<section><h3>Overlay For A Non-Developer</h3><div class="explain">' + escapeHtml(nodeOverlay.plainLanguage) + '</div></section>' : '',
-        nodeOverlay.effect ? '<section><h3>Overlay Local Effect</h3><div class="explain">' + escapeHtml(nodeOverlay.effect) + '</div></section>' : '',
+        nodeOverlay.plainLanguage ? '<section><h3>' + text.nodeOverlay + '</h3><div class="explain">' + escapeHtml(nodeOverlay.plainLanguage) + '</div></section>' : '',
+        nodeOverlay.effect ? '<section><h3>' + text.localEffect + '</h3><div class="explain">' + escapeHtml(nodeOverlay.effect) + '</div></section>' : '',
         code(details.code),
-        details.summary ? '<section><h3>Summary</h3><p>' + escapeHtml(details.summary) + '</p></section>' : '',
-        list("Rules", details.rules, false),
-        list("Conditions", details.conditions, true),
-        list("Filters", details.filters, true),
-        list("Inputs", details.inputs, true),
-        list("Outputs", details.outputs, true),
-        list("Overlay Responsibilities", nodeOverlay.responsibilities, false),
+        details.summary ? '<section><h3>' + text.summary + '</h3><p>' + escapeHtml(details.summary) + '</p></section>' : '',
+        list(text.rules, details.rules, false),
+        list(text.conditions, details.conditions, true),
+        list(text.filters, details.filters, true),
+        list(text.inputs, details.inputs, true),
+        list(text.outputs, details.outputs, true),
+        list(text.overlayResponsibilities, nodeOverlay.responsibilities, false),
         source(details.source),
-        node.subflow ? '<section><h3>Subflow</h3><code>' + escapeHtml(node.subflow) + '</code></section>' : ''
+        node.subflow ? '<section><h3>' + text.subflow + '</h3><code>' + escapeHtml(node.subflow) + '</code></section>' : ''
       ].join("");
     }
 
@@ -313,16 +381,16 @@ ${escapeHtml(mermaid)}
     function code(value) {
       if (!value || (!value.snippet && !value.call && !value.condition)) return "";
       return [
-        value.kind ? '<section><h3>Code Kind</h3><span class="meta">' + escapeHtml(value.kind) + '</span></section>' : '',
-        value.call ? '<section><h3>Call</h3><code>' + escapeHtml(value.call) + '</code></section>' : '',
-        value.condition ? '<section><h3>Condition</h3><code>' + escapeHtml(value.condition) + '</code></section>' : '',
-        value.snippet ? '<section><h3>Snippet</h3><pre class="code">' + escapeHtml(value.snippet) + '</pre></section>' : ''
+        value.kind ? '<section><h3>' + text.codeKind + '</h3><span class="meta">' + escapeHtml(value.kind) + '</span></section>' : '',
+        value.call ? '<section><h3>' + text.call + '</h3><code>' + escapeHtml(value.call) + '</code></section>' : '',
+        value.condition ? '<section><h3>' + text.condition + '</h3><code>' + escapeHtml(value.condition) + '</code></section>' : '',
+        value.snippet ? '<section><h3>' + text.snippet + '</h3><pre class="code">' + escapeHtml(value.snippet) + '</pre></section>' : ''
       ].join("");
     }
 
     function subflows(values) {
       if (!values || values.length === 0) return "";
-      return '<section><h3>Suggested Subflows</h3><ul>' +
+      return '<section><h3>' + text.suggestedSubflows + '</h3><ul>' +
         values.map((value) => '<li><strong>' + escapeHtml(value.label || value.id) + '</strong>' +
           (value.summary ? '<br>' + escapeHtml(value.summary) : '') + '</li>').join("") +
         '</ul></section>';
@@ -330,17 +398,17 @@ ${escapeHtml(mermaid)}
 
     function example(value) {
       if (!value || (!value.scenario && !value.input && !value.output)) return "";
-      return '<section><h3>Example</h3><div class="example">' +
-        (value.scenario ? '<div><strong>Scenario</strong>' + escapeHtml(value.scenario) + '</div>' : '') +
-        (value.input ? '<div><strong>Input</strong><code>' + escapeHtml(value.input) + '</code></div>' : '') +
-        (value.output ? '<div><strong>Output</strong>' + escapeHtml(value.output) + '</div>' : '') +
+      return '<section><h3>' + text.example + '</h3><div class="example">' +
+        (value.scenario ? '<div><strong>' + text.scenario + '</strong>' + escapeHtml(value.scenario) + '</div>' : '') +
+        (value.input ? '<div><strong>' + text.exampleInput + '</strong><code>' + escapeHtml(value.input) + '</code></div>' : '') +
+        (value.output ? '<div><strong>' + text.exampleOutput + '</strong>' + escapeHtml(value.output) + '</div>' : '') +
         '</div></section>';
     }
 
     function source(value) {
       if (!value || !value.file) return "";
       const line = value.line ? ":" + value.line : "";
-      return '<section><h3>Source</h3><code class="source">' + escapeHtml(value.file + line) + '</code></section>';
+      return '<section><h3>' + text.source + '</h3><code class="source">' + escapeHtml(value.file + line) + '</code></section>';
     }
 
     function escapeHtml(value) {

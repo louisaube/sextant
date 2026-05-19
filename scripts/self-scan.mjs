@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 const exec = promisify(execFile);
 const root = path.resolve(import.meta.dirname, "..");
 const cli = path.join(root, "src", "cli.js");
-const extraArgs = process.argv.slice(2);
+const extraArgs = withDefaultLanguage(process.argv.slice(2));
 
 if (extraArgs.includes("--llm") && !process.env.DEEPSEEK_API_KEY) {
   console.error("sextant self-scan --llm requires DEEPSEEK_API_KEY.");
@@ -57,4 +57,9 @@ for (const scan of scans) {
   }
 
   console.log(`${scan.label}: ${scan.output}`);
+}
+
+function withDefaultLanguage(args) {
+  if (args.includes("--lang") || args.includes("--language")) return args;
+  return [...args, "--lang", "fr"];
 }

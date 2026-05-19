@@ -22,6 +22,7 @@ const effectWords = [
 export function inferProcessFromSource(source, options) {
   const entry = options.entry;
   const file = options.file || "unknown";
+  const language = normalizeLanguage(options.language || options.lang);
   const extracted = extractFunctionBody(source, entry);
   const lines = usefulLines(extracted.body, extracted.startLine);
   const nodes = [
@@ -104,16 +105,21 @@ export function inferProcessFromSource(source, options) {
   return {
     id: slug(entry),
     title: entry,
+    language,
     source: {
       mode: "scan",
       file,
       entry
     },
     details: {
-      summary: `Retrofit scan of ${entry}.`,
-      risks: ["Retrofit mode is approximate: review snippets and source lines before trusting the graph."]
+      summary: language === "fr" ? `Scan retrofit de ${entry}.` : `Retrofit scan of ${entry}.`,
+      risks: [
+        language === "fr"
+          ? "Le mode retrofit est approximatif : verifier les snippets et les lignes source avant de faire confiance au graphe."
+          : "Retrofit mode is approximate: review snippets and source lines before trusting the graph."
+      ]
     },
-    overlay: buildOverlay(entry, file, nodes),
+    overlay: buildOverlay(entry, file, nodes, language),
     nodes,
     edges,
     subflows: []
@@ -237,24 +243,38 @@ function inferLine(line) {
   };
 }
 
-function buildOverlay(entry, file, nodes) {
-  const nodeOverlays = nodes.map((node) => explainNode(node));
+function buildOverlay(entry, file, nodes, language) {
+  const nodeOverlays = nodes.map((node) => explainNode(node, language));
   const flow = nodeOverlays.map((node) => node.plainLanguage).filter(Boolean);
 
   if (entry === "main" && nodes.some((node) => node.details?.code?.condition?.includes("command ==="))) {
-    return {
-      summary: "Command-line router for Sextant.",
-      plainLanguage: "When someone types a Sextant command in a terminal, this process decides which action to run.",
-      effect: "It turns one typed command into one visible result: help text, a config file, a rendered report, a watch process, a scanned report, or an error.",
-      example: {
-        scenario: "A user wants to inspect an existing source file.",
-        input: "sextant scan examples/legacy-classify.ts --entry classifyAttachment -o report.html",
-        output: "Sextant reads the file, builds a process map, and writes report.html plus the matching Mermaid and manifest files."
-      },
-      flow,
-      risks: ["The overlay explains the deterministic graph; trust the nodes, edges, snippets, and source lines first."],
-      nodes: nodeOverlays
-    };
+    return language === "fr"
+      ? {
+          summary: "Routeur de commandes Sextant.",
+          plainLanguage: "Quand quelqu'un tape une commande Sextant dans un terminal, ce processus decide quelle action lancer.",
+          effect: "Il transforme une commande tapee en un resultat visible : aide, fichier de configuration, rapport rendu, surveillance, rapport scanne, ou erreur.",
+          example: {
+            scenario: "Un utilisateur veut inspecter un fichier source existant.",
+            input: "sextant scan examples/legacy-classify.ts --entry classifyAttachment -o report.html",
+            output: "Sextant lit le fichier, construit une carte du processus, puis ecrit report.html avec les fichiers Mermaid et manifest associes."
+          },
+          flow,
+          risks: ["Cette surcouche explique le graphe deterministe ; faire confiance d'abord aux noeuds, aux liens, aux snippets et aux lignes source."],
+          nodes: nodeOverlays
+        }
+      : {
+          summary: "Command-line router for Sextant.",
+          plainLanguage: "When someone types a Sextant command in a terminal, this process decides which action to run.",
+          effect: "It turns one typed command into one visible result: help text, a config file, a rendered report, a watch process, a scanned report, or an error.",
+          example: {
+            scenario: "A user wants to inspect an existing source file.",
+            input: "sextant scan examples/legacy-classify.ts --entry classifyAttachment -o report.html",
+            output: "Sextant reads the file, builds a process map, and writes report.html plus the matching Mermaid and manifest files."
+          },
+          flow,
+          risks: ["The overlay explains the deterministic graph; trust the nodes, edges, snippets, and source lines first."],
+          nodes: nodeOverlays
+        };
   }
 
   const effectCalls = nodes
@@ -263,6 +283,24 @@ function buildOverlay(entry, file, nodes) {
   const returns = nodes
     .filter((node) => node.type === "return" && node.details?.code?.snippet)
     .map((node) => node.details.code.snippet);
+
+  if (language === "fr") {
+    return {
+      summary: `Scan retrofit de ${entry}.`,
+      plainLanguage: `Cette carte suit ce qui se passe apres l'appel a ${entry}.`,
+      effect: effectCalls.length > 0
+        ? `Ce processus peut modifier des sorties ou des systemes externes via : ${effectCalls.join(", ")}.`
+        : "Ce processus organise surtout des decisions et des appels internes.",
+      example: {
+        scenario: `Quelqu'un appelle ${entry} depuis ${file}.`,
+        input: `${entry}(...)`,
+        output: returns.length > 0 ? returns.join(" ou ") : "Le processus atteint la derniere action visible dans le graphe."
+      },
+      flow,
+      risks: ["Cette surcouche est explicative ; utiliser les noeuds, liens, snippets et lignes source deterministes pour corriger la carte."],
+      nodes: nodeOverlays
+    };
+  }
 
   return {
     summary: `Retrofit scan of ${entry}.`,
@@ -281,56 +319,98 @@ function buildOverlay(entry, file, nodes) {
   };
 }
 
-function explainNode(node) {
+function explainNode(node, language) {
   const code = node.details?.code || {};
 
   if (node.type === "entry") {
-    return {
-      id: node.id,
-      plainLanguage: `This is where the ${node.label} process starts.`,
-      effect: "Starts the process shown in the graph."
-    };
+    return language === "fr"
+      ? {
+          id: node.id,
+          plainLanguage: `C'est ici que le processus ${node.label} commence.`,
+          effect: "Demarre le processus montre dans le graphe."
+        }
+      : {
+          id: node.id,
+          plainLanguage: `This is where the ${node.label} process starts.`,
+          effect: "Starts the process shown in the graph."
+        };
   }
   if (node.type === "branch") {
-    return {
-      id: node.id,
-      plainLanguage: `Decide whether this condition is true: ${code.condition || node.label}.`,
-      effect: "Chooses which path the process follows next."
-    };
+    return language === "fr"
+      ? {
+          id: node.id,
+          plainLanguage: `Decide si cette condition est vraie : ${code.condition || node.label}.`,
+          effect: "Choisit le prochain chemin du processus."
+        }
+      : {
+          id: node.id,
+          plainLanguage: `Decide whether this condition is true: ${code.condition || node.label}.`,
+          effect: "Chooses which path the process follows next."
+        };
   }
   if (node.type === "effect") {
-    return {
-      id: node.id,
-      plainLanguage: `Run ${code.call || node.label}; this probably changes something outside the current function.`,
-      effect: `Visible or external effect likely produced by ${code.call || node.label}.`
-    };
+    return language === "fr"
+      ? {
+          id: node.id,
+          plainLanguage: `Lance ${code.call || node.label} ; cela modifie probablement quelque chose hors de la fonction courante.`,
+          effect: `Effet visible ou externe probablement produit par ${code.call || node.label}.`
+        }
+      : {
+          id: node.id,
+          plainLanguage: `Run ${code.call || node.label}; this probably changes something outside the current function.`,
+          effect: `Visible or external effect likely produced by ${code.call || node.label}.`
+        };
   }
   if (node.type === "step") {
-    return {
-      id: node.id,
-      plainLanguage: `Run ${code.call || node.label}; this delegates part of the work to another function.`,
-      effect: `Moves work into ${code.call || node.label}.`
-    };
+    return language === "fr"
+      ? {
+          id: node.id,
+          plainLanguage: `Lance ${code.call || node.label} ; une partie du travail est deleguee a une autre fonction.`,
+          effect: `Deplace le travail vers ${code.call || node.label}.`
+        }
+      : {
+          id: node.id,
+          plainLanguage: `Run ${code.call || node.label}; this delegates part of the work to another function.`,
+          effect: `Moves work into ${code.call || node.label}.`
+        };
   }
   if (node.type === "return") {
-    return {
-      id: node.id,
-      plainLanguage: "Stop this path and send a result back to the caller.",
-      effect: "Ends this path."
-    };
+    return language === "fr"
+      ? {
+          id: node.id,
+          plainLanguage: "Arrete ce chemin et renvoie un resultat a l'appelant.",
+          effect: "Termine ce chemin."
+        }
+      : {
+          id: node.id,
+          plainLanguage: "Stop this path and send a result back to the caller.",
+          effect: "Ends this path."
+        };
   }
   if (node.type === "error") {
-    return {
-      id: node.id,
-      plainLanguage: "Stop this path by raising an error.",
-      effect: "Rejects this path as invalid or unsupported."
-    };
+    return language === "fr"
+      ? {
+          id: node.id,
+          plainLanguage: "Arrete ce chemin en levant une erreur.",
+          effect: "Rejette ce chemin comme invalide ou non supporte."
+        }
+      : {
+          id: node.id,
+          plainLanguage: "Stop this path by raising an error.",
+          effect: "Rejects this path as invalid or unsupported."
+        };
   }
-  return {
-    id: node.id,
-    plainLanguage: "Follow this step in the process.",
-    effect: ""
-  };
+  return language === "fr"
+    ? {
+        id: node.id,
+        plainLanguage: "Suit cette etape du processus.",
+        effect: ""
+      }
+    : {
+        id: node.id,
+        plainLanguage: "Follow this step in the process.",
+        effect: ""
+      };
 }
 
 function cleanDecision(text) {
@@ -393,4 +473,8 @@ function lineNumberAt(source, index) {
 
 function countChar(value, char) {
   return [...value].filter((item) => item === char).length;
+}
+
+function normalizeLanguage(value) {
+  return value === "fr" ? "fr" : "en";
 }

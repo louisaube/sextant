@@ -77,7 +77,7 @@ async function renderFile(args) {
   if (!input) throw new Error("render expects a workflow file.");
 
   const output = args.o || args.output || defaultOutput(input);
-  const manifest = await loadWorkflow(input);
+  const manifest = withLanguage(await loadWorkflow(input), args.lang || args.language);
   const files = await writeReport(manifest, output);
   console.log(`wrote ${files.html}`);
 }
@@ -117,12 +117,14 @@ async function scanFile(args) {
 
   const file = path.resolve(input);
   const source = await readFile(file, "utf8");
-  let manifest = inferProcessFromSource(source, { entry, file });
+  const language = normalizeLanguage(args.lang || args.language);
+  let manifest = inferProcessFromSource(source, { entry, file, language });
 
   if (args.llm) {
     manifest = await enrichManifestWithLlm(source, manifest, {
       entry,
       file,
+      language,
       provider: args.provider || "deepseek",
       model: args.model || "deepseek-chat",
       cache: args.cache !== false,
@@ -216,14 +218,26 @@ function defaultOutput(input) {
   return path.join(parsed.dir, `${parsed.name}.html`);
 }
 
+function withLanguage(manifest, value) {
+  const language = normalizeLanguage(value);
+  return {
+    ...manifest,
+    language
+  };
+}
+
+function normalizeLanguage(value) {
+  return value === "fr" ? "fr" : "en";
+}
+
 function printHelp() {
   console.log(`Sextant
 
 Usage:
   sextant init
-  sextant render <workflow.ts|workflow.js> -o <report.html>
-  sextant watch <workflow.ts|workflow.js> -o <report.html>
-  sextant scan <file.ts|file.js> --entry <name> -o <report.html>
-  sextant scan <file.ts|file.js> --entry <name> --llm --provider deepseek --model deepseek-chat
+  sextant render <workflow.ts|workflow.js> -o <report.html> --lang fr
+  sextant watch <workflow.ts|workflow.js> -o <report.html> --lang fr
+  sextant scan <file.ts|file.js> --entry <name> -o <report.html> --lang fr
+  sextant scan <file.ts|file.js> --entry <name> --llm --provider deepseek --model deepseek-chat --lang fr
 `);
 }

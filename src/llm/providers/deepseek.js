@@ -60,6 +60,7 @@ Never invent, rename, reorder, or delete graph nodes or edges.
 Never output node labels, node types, edge definitions, source snippets, or code fields.
 Only reference existing node ids inside overlay.nodes.
 The deterministic manifest is the source of truth. Your job is an interpretive overlay only.
+Use the language requested by manifest.language. If manifest.language is "fr", write the overlay in French.
 Explain the overall effect for a smart non-developer: what changes, what is produced, or what becomes possible after the process runs.
 Always include a simple input-to-output example.
 Allowed shape:
