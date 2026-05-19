@@ -22,8 +22,8 @@ const effectWords = [
 export function inferProcessFromSource(source, options) {
   const entry = options.entry;
   const file = options.file || "unknown";
-  const body = extractFunctionBody(source, entry);
-  const lines = usefulLines(body);
+  const extracted = extractFunctionBody(source, entry);
+  const lines = usefulLines(extracted.body, extracted.startLine);
   const nodes = [
     {
       id: "entry-0",
@@ -62,8 +62,10 @@ export function inferProcessFromSource(source, options) {
     };
 
     nodes.push(node);
-    edges.push({ from: previous, to: node.id });
-    previous = node.id;
+    if (previous) {
+      edges.push({ from: previous, to: node.id });
+    }
+    previous = isTerminal(inferred.type) ? null : node.id;
     index++;
   }
 
@@ -104,21 +106,28 @@ function extractFunctionBody(source, entry) {
     if (char === "{") depth++;
     if (char === "}") depth--;
     if (depth === 0) {
-      return source.slice(openIndex + 1, index);
+      return {
+        body: source.slice(openIndex + 1, index),
+        startLine: lineNumberAt(source, openIndex + 1)
+      };
     }
   }
 
   throw new Error(`Could not parse body for "${entry}".`);
 }
 
-function usefulLines(body) {
+function usefulLines(body, startLine) {
   return body
     .split(/\r?\n/)
     .map((text, offset) => ({
-      number: offset + 1,
+      number: startLine + offset,
       text: text.replace(/\/\/.*$/, "").trim()
     }))
     .filter((line) => line.text && line.text !== "{" && line.text !== "}");
+}
+
+function isTerminal(type) {
+  return type === "return" || type === "error";
 }
 
 function inferLine(line) {
@@ -182,4 +191,8 @@ function slug(value) {
 
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function lineNumberAt(source, index) {
+  return source.slice(0, index).split(/\r?\n/).length;
 }

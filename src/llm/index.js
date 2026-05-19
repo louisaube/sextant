@@ -24,12 +24,13 @@ export async function enrichManifestWithLlm(source, manifest, options = {}) {
     raw = await provider.enrichProcess(context, {
       model
     });
-    if (options.cache !== false) {
-      await writeCache(key, raw, options.cacheDir);
-    }
   }
 
   const enrichment = validateEnrichment(raw, manifest);
+
+  if (cacheStatus === "miss" && options.cache !== false) {
+    await writeCache(key, raw, options.cacheDir);
+  }
 
   return mergeEnrichment(manifest, enrichment, {
     provider: providerName,

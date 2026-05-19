@@ -6,7 +6,7 @@ export function buildLlmContext(source, manifest, options) {
     file: options.file || "unknown",
     imports: extractImports(source),
     entrySource: extractEntrySource(source, entry),
-    calls: extractCalls(source),
+    calls: extractCalls(extractEntrySource(source, entry)),
     manifest
   };
 }

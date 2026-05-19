@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import {
+  buildLlmContext,
   createMockProvider,
   enrichManifestWithLlm,
   inferProcessFromSource,
@@ -68,6 +69,19 @@ try {
   assert.equal(inferred.source.mode, "scan");
   assert.equal(inferred.nodes.some((node) => node.type === "branch"), true);
   assert.equal(inferred.nodes.some((node) => node.type === "effect"), true);
+  assert.equal(inferred.edges.some((edge) => edge.from === "return-4" && edge.to === "effect-5"), false);
+  assert.equal(inferred.nodes.find((node) => node.id === "effect-5").details.source.line, 9);
+
+  const scopedContext = buildLlmContext(
+    "import x from 'x';\nfunction classifyAttachment() { wantedCall(); }\nfunction unrelated() { secretCall(); }",
+    inferred,
+    {
+      entry: "classifyAttachment",
+      file: "scoped.js"
+    }
+  );
+
+  assert.deepEqual(scopedContext.calls, ["classifyAttachment", "wantedCall"]);
 
   const provider = createMockProvider((calls) => ({
     version: 1,
@@ -129,6 +143,43 @@ try {
   });
 
   assert.equal(provider.calls, 2);
+
+  const invalidProvider = createMockProvider({
+    nodes: [
+      {
+        id: "entry-0",
+        type: "banana"
+      }
+    ]
+  });
+
+  await assert.rejects(
+    () => enrichManifestWithLlm(legacySource, inferred, {
+      provider: "mock",
+      model: "mock-invalid",
+      providerInstance: invalidProvider,
+      cacheDir: path.join(tmp, "invalid-cache")
+    }),
+    /known node type/
+  );
+
+  const cachedInvalidProvider = createMockProvider({
+    nodes: [
+      {
+        id: "entry-0",
+        label: "Recovered"
+      }
+    ]
+  });
+
+  const recovered = await enrichManifestWithLlm(legacySource, inferred, {
+    provider: "mock",
+    model: "mock-invalid",
+    providerInstance: cachedInvalidProvider,
+    cacheDir: path.join(tmp, "invalid-cache")
+  });
+
+  assert.equal(recovered.nodes[0].label, "Recovered");
 
   const { stderr } = await exec(process.execPath, [
     path.join(root, "src", "cli.js"),
