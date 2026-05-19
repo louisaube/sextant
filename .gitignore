@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.sextant-cache/
+.cmr-memory.jsonl
+*.log
+*.tgz
+examples/*.html
+examples/*.mmd
+examples/*.workflow.json

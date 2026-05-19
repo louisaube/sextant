@@ -1,0 +1,37 @@
+{
+  "name": "@louis/sextant",
+  "version": "0.1.0",
+  "description": "Code-first process visualization for TypeScript and JavaScript workflows.",
+  "type": "module",
+  "bin": {
+    "sextant": "./src/cli.js"
+  },
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.js"
+    }
+  },
+  "scripts": {
+    "demo": "node ./src/cli.js render ./examples/inscription.workflow.js -o ./examples/inscription.html",
+    "scan:demo": "node ./src/cli.js scan ./examples/legacy-classify.ts --entry classifyAttachment -o ./examples/legacy-classify.html",
+    "test": "node ./test/smoke.mjs",
+    "pack:smoke": "node ./test/pack-smoke.mjs"
+  },
+  "dependencies": {
+    "typescript": "^5.6.0"
+  },
+  "files": [
+    "src",
+    "examples/*.workflow.js",
+    "examples/legacy-classify.ts",
+    "README.md",
+    "DIRECTION.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}
