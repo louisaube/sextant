@@ -28,7 +28,12 @@ export function inferProcessFromSource(source, options = {}) {
   const fileIndex = buildFileIndex(sourceFile);
   const entryNode = findEntry(sourceFile, entry, fileIndex);
   const key = scanKey(file, entry);
-  const builder = new AstProcessBuilder(sourceFile, file, entry, language, { context, depth, fileIndex });
+  const builder = new AstProcessBuilder(sourceFile, file, entry, language, {
+    context,
+    depth,
+    fileIndex,
+    currentClass: classNameForEntry(fileIndex, entry)
+  });
   const body = entryNode.body;
 
   if (!body || !ts.isBlock(body)) throw new Error(`Entry "${entry}" does not look like a block function.`);
@@ -72,6 +77,8 @@ class AstProcessBuilder {
     this.context = options.context;
     this.depth = options.depth;
     this.fileIndex = options.fileIndex || buildFileIndex(sourceFile);
+    this.currentClass = options.currentClass || classNameForEntry(this.fileIndex, entry);
+    this.instances = new Map();
     this.subflows = [];
     this.nodes = [];
     this.edges = [];
@@ -97,6 +104,7 @@ class AstProcessBuilder {
     if (isLoop(statement)) return this.emitLoop(statement, cursors);
     if (ts.isReturnStatement(statement)) return this.emitReturn(statement, cursors);
     if (ts.isThrowStatement(statement)) return this.emitThrow(statement, cursors);
+    if (ts.isVariableStatement(statement)) this.recordLocalInstances(statement);
     if (!ts.isExpressionStatement(statement) && !ts.isVariableStatement(statement)) return cursors;
     const call = firstCall(statement);
     return call ? this.emitCall(call, statement, cursors) : cursors;
@@ -188,6 +196,8 @@ class AstProcessBuilder {
     for (const handler of handlers) {
       current = this.emitCall(handler.call, handler.node, current, { callee: handler.callee, text: handler.node.getText(this.sourceFile) });
     }
+    const returnCall = handlers.length === 0 && statement.expression ? firstCall(statement.expression) : null;
+    if (returnCall) current = this.emitCall(returnCall, statement, current);
     const text = statement.getText(this.sourceFile);
     const node = this.createNode("return", compact(text), statement, {
       summary: "Inferred from AST return statement. Retrofit mode is approximate.",
@@ -212,6 +222,8 @@ class AstProcessBuilder {
       file: this.file,
       sourceFile: this.sourceFile,
       fileIndex: this.fileIndex,
+      currentClass: this.currentClass,
+      instances: this.instances,
       context: this.context
     });
     if (!isScannableTarget(target)) return { callTarget: target };
@@ -265,14 +277,28 @@ class AstProcessBuilder {
     if (this.edges.some((edge) => edge.from === from && edge.to === to && edge.label === label)) return;
     this.edges.push({ from, to, ...(label ? { label } : {}) });
   }
+
+  recordLocalInstances(statement) {
+    for (const declaration of statement.declarationList.declarations) {
+      if (!ts.isIdentifier(declaration.name) || !declaration.initializer) continue;
+      const className = newExpressionClassName(declaration.initializer);
+      if (className && this.fileIndex.classes.has(className)) this.instances.set(declaration.name.text, className);
+    }
+  }
 }
 
 function buildFileIndex(sourceFile) {
   const locals = new Map();
   const imports = new Map();
+  const classes = new Map();
+  const methods = new Map();
   let defaultExport = null;
 
   for (const statement of sourceFile.statements) {
+    if (ts.isClassDeclaration(statement) && statement.name?.text) {
+      indexClass(statement.name.text, statement, classes, methods);
+      continue;
+    }
     if (ts.isFunctionDeclaration(statement) && statement.name?.text) {
       locals.set(statement.name.text, statement);
       if (hasDefaultModifier(statement)) defaultExport = statement;
@@ -281,6 +307,10 @@ function buildFileIndex(sourceFile) {
     if (ts.isVariableStatement(statement)) {
       for (const declaration of statement.declarationList.declarations) {
         if (!ts.isIdentifier(declaration.name) || !declaration.initializer) continue;
+        if (ts.isClassExpression(declaration.initializer)) {
+          indexClass(declaration.name.text, declaration.initializer, classes, methods);
+          continue;
+        }
         if (ts.isArrowFunction(declaration.initializer) || ts.isFunctionExpression(declaration.initializer)) {
           locals.set(declaration.name.text, declaration.initializer);
           if (hasDefaultModifier(statement)) defaultExport = declaration.initializer;
@@ -305,18 +335,88 @@ function buildFileIndex(sourceFile) {
     }
   }
 
-  return { locals, imports, defaultExport };
+  return { locals, imports, classes, methods, defaultExport };
 }
 
 function findEntry(sourceFile, entry, fileIndex = buildFileIndex(sourceFile)) {
-  const found = fileIndex.locals.get(entry) || (entry === "default" ? fileIndex.defaultExport : null);
+  const method = fileIndex.methods.get(entry);
+  const found = fileIndex.locals.get(entry) || method?.node || (entry === "default" ? fileIndex.defaultExport : null);
   if (found) return found;
   throw new Error(`Could not find entry "${entry}".`);
 }
 
+function indexClass(className, classNode, classes, methods) {
+  classes.set(className, classNode);
+  for (const member of classNode.members || []) {
+    if (!ts.isMethodDeclaration(member) || !member.body) continue;
+    const name = memberName(member.name);
+    if (!name || name === "constructor") continue;
+    const entry = `${className}.${name}`;
+    methods.set(entry, {
+      node: member,
+      className,
+      methodName: name,
+      static: hasStaticModifier(member)
+    });
+  }
+}
+
+function inferPropertyCallTarget(expression, options) {
+  if (!ts.isPropertyAccessExpression(expression)) return null;
+  const methodName = expression.name.text;
+  const receiver = expression.expression;
+
+  if (isThisExpression(receiver) && options.currentClass) {
+    return methodTarget(options.currentClass, methodName, options);
+  }
+
+  if (ts.isIdentifier(receiver)) {
+    const className = receiver.text;
+    if (options.fileIndex.classes.has(className)) return methodTarget(className, methodName, options, { staticOnly: true });
+    const instanceClass = options.instances?.get(className);
+    if (instanceClass) return methodTarget(instanceClass, methodName, options);
+  }
+
+  const newClassName = newExpressionClassName(receiver);
+  if (newClassName) return methodTarget(newClassName, methodName, options);
+
+  return null;
+}
+
+function methodTarget(className, methodName, options, constraints = {}) {
+  const entry = `${className}.${methodName}`;
+  const method = options.fileIndex.methods.get(entry);
+  if (!method) return null;
+  if (constraints.staticOnly && !method.static) return null;
+  return { kind: localKind(entry, options.file), file: options.file, entry };
+}
+
+function classNameForEntry(fileIndex, entry) {
+  return fileIndex.methods.get(entry)?.className || "";
+}
+
+function newExpressionClassName(expression) {
+  if (!expression || !ts.isNewExpression(expression)) return "";
+  const target = expression.expression;
+  return ts.isIdentifier(target) ? target.text : "";
+}
+
+function isThisExpression(node) {
+  return node?.kind === ts.SyntaxKind.ThisKeyword;
+}
+
+function memberName(name) {
+  if (!name) return "";
+  if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) return name.text;
+  return "";
+}
+
 function inferCallTarget(call, callee, text, options) {
   const localName = localCallableName(call.expression);
-  const callText = `${callee} ${text}`.toLowerCase();
+  const propertyTarget = inferPropertyCallTarget(call.expression, options);
+  if (propertyTarget) return propertyTarget;
+
+  const callText = callee.toLowerCase();
   const local = localName ? options.fileIndex.locals.get(localName) : null;
 
   if (local) return { kind: localKind(localName, options.file), file: options.file, entry: localName };
@@ -624,6 +724,10 @@ function defaultExportName(index) {
 
 function hasDefaultModifier(node) {
   return Boolean(node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword));
+}
+
+function hasStaticModifier(node) {
+  return Boolean(node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.StaticKeyword));
 }
 
 function caseLabel(clause, sourceFile) {

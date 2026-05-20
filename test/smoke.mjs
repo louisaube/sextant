@@ -217,6 +217,73 @@ try {
   });
   assert.equal(routeFrame.nodes.find((node) => node.details?.code?.call === "fetch").details.callTarget.kind, "route");
 
+  const oopDirectEntry = inferProcessFromSource("class Worker { run(){ this.next(); } next(){ return true; } }", {
+    entry: "Worker.run",
+    file: path.join(tmp, "worker.ts"),
+    depth: 1
+  });
+  assert.equal(oopDirectEntry.source.entry, "Worker.run");
+  const thisNext = oopDirectEntry.nodes.find((node) => node.details?.code?.call === "this.next");
+  assert.equal(thisNext.details.callTarget.entry, "Worker.next");
+  assert.equal(thisNext.details.callTarget.reason, "expanded");
+
+  const localInstanceFrame = inferProcessFromSource("class Worker { run(){ return true; } } function root(){ const worker = new Worker(); worker.run(); }", {
+    entry: "root",
+    file: path.join(tmp, "local-instance.ts"),
+    depth: 1
+  });
+  const workerRun = localInstanceFrame.nodes.find((node) => node.details?.code?.call === "worker.run");
+  assert.equal(workerRun.details.callTarget.entry, "Worker.run");
+  assert.equal(workerRun.details.callTarget.reason, "expanded");
+
+  const newInstanceFrame = inferProcessFromSource("class Worker { run(){ return true; } } function root(){ new Worker().run(); }", {
+    entry: "root",
+    file: path.join(tmp, "new-instance.ts"),
+    depth: 1
+  });
+  assert.equal(newInstanceFrame.nodes.find((node) => node.details?.code?.call === "new Worker().run").details.callTarget.entry, "Worker.run");
+
+  const staticFrame = inferProcessFromSource("class Worker { static boot(){ return true; } } function root(){ Worker.boot(); }", {
+    entry: "root",
+    file: path.join(tmp, "static-worker.ts"),
+    depth: 1
+  });
+  assert.equal(staticFrame.nodes.find((node) => node.details?.code?.call === "Worker.boot").details.callTarget.entry, "Worker.boot");
+
+  const oopCycle = inferProcessFromSource("class Worker { a(){ this.b(); } b(){ this.a(); } }", {
+    entry: "Worker.a",
+    file: path.join(tmp, "oop-cycle.ts"),
+    depth: 2
+  });
+  assert.equal(oopCycle.subflows[0].nodes.find((node) => node.details?.code?.call === "this.a").details.callTarget.reason, "cycle");
+
+  const returnMethodCall = inferProcessFromSource("class Worker { run(){ return this.next(); } next(){ return true; } }", {
+    entry: "Worker.run",
+    file: path.join(tmp, "return-method.ts"),
+    depth: 1
+  });
+  assert.equal(returnMethodCall.nodes.find((node) => node.details?.code?.call === "this.next").details.callTarget.reason, "expanded");
+
+  const nonLocalMethods = inferProcessFromSource("function root(){ const map = new Map(); map.set('x', 1); const context = { stack: new Set() }; context.stack.add('x'); }", {
+    entry: "root",
+    file: path.join(tmp, "non-local-methods.ts"),
+    depth: 1
+  });
+  assert.equal(nonLocalMethods.nodes.find((node) => node.details?.code?.call === "map.set").details.callTarget.kind, "unresolved");
+  assert.equal(nonLocalMethods.nodes.find((node) => node.details?.code?.call === "context.stack.add").details.callTarget.kind, "unresolved");
+
+  const scannerSource = await readFile(path.join(root, "src", "scan", "inferProcess.js"), "utf8");
+  const scannerDogfood = inferProcessFromSource(scannerSource, {
+    entry: "inferProcessFromSource",
+    file: path.join(root, "src", "scan", "inferProcess.js"),
+    rootDir: root,
+    depth: 2
+  });
+  const builderEmit = scannerDogfood.nodes.find((node) => node.details?.code?.call === "builder.emitStatements");
+  assert.equal(builderEmit.details.callTarget.entry, "AstProcessBuilder.emitStatements");
+  assert.equal(builderEmit.details.callTarget.reason, "expanded");
+  assert.equal(scannerDogfood.subflows.some((flow) => flow.source?.entry === "AstProcessBuilder.emitStatements"), true);
+
   await writeFile(path.join(tmp, "helper.ts"), "export function importedHelper(){ return 'ok'; }", "utf8");
   const importedFrame = inferProcessFromSource("import { importedHelper } from './helper'; function root(){ importedHelper(); }", {
     entry: "root",

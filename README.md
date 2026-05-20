@@ -77,6 +77,12 @@ Cette couche sert a comprendre le projet. Pour verifier un flux reel, utiliser e
 - `--depth 1` : appels locaux directs.
 - `--depth 2` : appels directs et appels des sous-frames.
 
+Les fonctions top-level et les methodes de classes locales peuvent servir de point d'entree :
+
+```bash
+npx sextant scan src/scan/inferProcess.js --entry AstProcessBuilder.emitStatements -o emit-statements.html
+```
+
 Les frames peuvent etre `code`, `front`, `route`, `data`, `storage` ou `integration`.
 Si Sextant trouve le code local, le rapport ecrit un HTML cliquable pour la frame. Sinon la frontiere reste visible comme frame opaque.
 
