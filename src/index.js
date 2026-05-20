@@ -13,3 +13,4 @@ export { enrichManifestWithLlm, buildLlmContext, createMockProvider } from "./ll
 export { toMermaid } from "./render/toMermaid.js";
 export { toHtml } from "./render/toHtml.js";
 export { writeReport } from "./render/writeReport.js";
+export { writeReportIndex } from "./render/reportIndex.js";

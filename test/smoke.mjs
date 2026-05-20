@@ -16,7 +16,8 @@ import {
   step,
   branch,
   effect,
-  writeReport
+  writeReport,
+  writeReportIndex
 } from "../src/index.js";
 
 const exec = promisify(execFile);
@@ -241,6 +242,32 @@ try {
   const frameFiles = await writeReport(depth1, path.join(tmp, "depth.html"));
   assert.equal(frameFiles.subflows.some((item) => item.id.endsWith("-normalizelanguage")), true);
   assert.match(await readFile(path.join(tmp, "depth.html"), "utf8"), /depth\.depth-ts-normalizelanguage\.html/);
+
+  const firstIndexReport = await writeReport(manifest, path.join(tmp, "first.html"));
+  const secondIndexReport = await writeReport(inferred, path.join(tmp, "second.html"));
+  const reportIndex = await writeReportIndex([
+    {
+      label: "First report",
+      html: firstIndexReport.html,
+      source: "first.workflow.js",
+      entry: "first",
+      mode: "native",
+      subflowCount: firstIndexReport.subflows?.length || 0
+    },
+    {
+      label: "Second report",
+      html: secondIndexReport.html,
+      source: "examples/legacy-classify.ts",
+      entry: "classifyAttachment",
+      mode: "scan",
+      subflowCount: secondIndexReport.subflows?.length || 0
+    }
+  ], path.join(tmp, "index.html"));
+  const reportIndexHtml = await readFile(reportIndex, "utf8");
+  assert.match(reportIndexHtml, /href="first\.html"/);
+  assert.match(reportIndexHtml, /href="second\.html"/);
+  assert.doesNotMatch(reportIndexHtml, /href="[^"]+\.mmd"/);
+  assert.doesNotMatch(reportIndexHtml, /href="[^"]+\.workflow\.json"/);
 
   const project = await inferProjectFromDirectory(root, { language: "fr" });
   const projectHtml = toHtml(project);

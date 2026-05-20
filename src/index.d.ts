@@ -238,3 +238,18 @@ export declare function writeReport(
   manifest: string;
   subflows?: Array<{ id: string; html: string; mermaid: string; manifest: string }>;
 }>;
+
+export interface ReportIndexItem {
+  label: string;
+  html: string;
+  source?: string;
+  entry?: string;
+  mode?: string;
+  subflowCount?: number;
+}
+
+export declare function writeReportIndex(
+  reports: ReportIndexItem[],
+  outputFile: string,
+  options?: { title?: string; description?: string }
+): Promise<string>;
