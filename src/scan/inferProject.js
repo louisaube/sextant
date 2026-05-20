@@ -106,6 +106,10 @@ function buildGroups(root, files, packageJson) {
   groups.push({ id: "cli", label: "Interface CLI", kind: "cli", files: byPrefix("src/cli") });
   groups.push({ id: "native", label: "Mode natif workflow-as-code", kind: "native", files: byPrefix("src/native/") });
   groups.push({ id: "scan", label: "Mode retrofit scan", kind: "scan", files: byPrefix("src/scan/") });
+  groups.push({ id: "front", label: "Frames front", kind: "front", files: files.filter(isFrontResource) });
+  groups.push({ id: "routes", label: "Frames routes/API", kind: "route", files: files.filter(isRouteResource) });
+  groups.push({ id: "data", label: "Frames data", kind: "data", files: files.filter(isDataResource) });
+  groups.push({ id: "integrations", label: "Integrations externes", kind: "integration", files: files.filter(isIntegrationResource) });
   groups.push({ id: "llm", label: "Surcouche LLM", kind: "llm", files: byPrefix("src/llm/") });
   groups.push({ id: "render", label: "Rendu HTML Mermaid", kind: "render", files: byPrefix("src/render/") });
   groups.push({ id: "examples", label: "Exemples et dogfooding", kind: "examples", files: byPrefix("examples/") });
@@ -130,7 +134,7 @@ function buildNodes(root, groups, packageJson, language) {
   groups.forEach((group, index) => {
     nodes.push({
       id: `project-${index + 1}-${group.id}`,
-      type: group.kind === "render" || group.kind === "llm" ? "effect" : "step",
+      type: ["render", "llm", "route", "data", "integration"].includes(group.kind) ? "effect" : "step",
       label: group.label,
       details: {
         summary: groupSummary(group.kind, language),
@@ -277,6 +281,10 @@ function groupSummary(kind, language) {
     cli: "Point d'entree commande utilisateur.",
     native: "DSL workflow-as-code.",
     scan: "Retrofit depuis code existant.",
+    front: "Interactions UI et handlers front.",
+    route: "Routes et points d'entree API.",
+    data: "Schemas, requetes et ressources de donnees.",
+    integration: "Connecteurs et appels externes.",
     llm: "Surcouche explicative optionnelle.",
     render: "Transformation du manifest en Mermaid et HTML.",
     examples: "Cas de demonstration et dogfooding.",
@@ -288,6 +296,10 @@ function groupSummary(kind, language) {
     cli: "User command entry point.",
     native: "Workflow-as-code DSL.",
     scan: "Retrofit from existing code.",
+    front: "UI interactions and frontend handlers.",
+    route: "Routes and API entry points.",
+    data: "Schemas, queries, and data resources.",
+    integration: "Connectors and external calls.",
     llm: "Optional explanatory overlay.",
     render: "Manifest to Mermaid and HTML.",
     examples: "Demo and dogfooding cases.",
@@ -303,6 +315,10 @@ function groupInputs(kind, packageJson, language) {
       cli: ["Arguments terminal"],
       native: ["Code workflow structure"],
       scan: ["Fichier source + point d'entree"],
+      front: ["Evenements UI"],
+      route: ["Requetes HTTP"],
+      data: ["Modeles, schemas, requetes"],
+      integration: ["API et services externes"],
       llm: ["Manifest deterministe + snippets"],
       render: ["Process Manifest"],
       docs: ["README, DIRECTION, AGENTS"],
@@ -314,6 +330,10 @@ function groupInputs(kind, packageJson, language) {
     cli: ["Terminal arguments"],
     native: ["Structured workflow code"],
     scan: ["Source file + entry point"],
+    front: ["UI events"],
+    route: ["HTTP requests"],
+    data: ["Models, schemas, queries"],
+    integration: ["External APIs and services"],
     llm: ["Deterministic manifest + snippets"],
     render: ["Process Manifest"],
     docs: ["README, DIRECTION, AGENTS"],
@@ -329,6 +349,10 @@ function groupOutputs(kind, language) {
       cli: ["Commande executee"],
       native: ["Manifest natif"],
       scan: ["Manifest retrofit"],
+      front: ["Frames d'interaction utilisateur"],
+      route: ["Frames API"],
+      data: ["Frames data"],
+      integration: ["Frontieres externes visibles"],
       llm: ["Overlay explicatif"],
       render: ["HTML, Mermaid, JSON"],
       docs: ["Boussole produit"],
@@ -338,10 +362,14 @@ function groupOutputs(kind, language) {
   }
   return {
     package: ["sextant binary"],
-    cli: ["Executed command"],
-    native: ["Native manifest"],
-    scan: ["Retrofit manifest"],
-    llm: ["Explanatory overlay"],
+      cli: ["Executed command"],
+      native: ["Native manifest"],
+      scan: ["Retrofit manifest"],
+      front: ["User interaction frames"],
+      route: ["API frames"],
+      data: ["Data frames"],
+      integration: ["Visible external boundaries"],
+      llm: ["Explanatory overlay"],
     render: ["HTML, Mermaid, JSON"],
     docs: ["Product compass"],
     examples: ["Regenerable reports"],
@@ -356,6 +384,10 @@ function groupPlainLanguage(kind, language) {
     cli: "C'est la porte d'entree : l'utilisateur tape une commande, puis Sextant choisit le bon traitement.",
     native: "C'est la voie propre quand on ecrit un nouveau processus visualisable des le depart.",
     scan: "C'est la voie retrofit quand on arrive apres coup sur du code deja ecrit.",
+    front: "Ce sont les endroits ou un utilisateur declenche le processus depuis une interface.",
+    route: "Ce sont les portes HTTP que d'autres couches peuvent appeler.",
+    data: "Ce sont les endroits ou le processus touche les donnees.",
+    integration: "Ce sont les frontieres avec les systemes externes.",
     llm: "C'est le traducteur pedagogique : il explique sans toucher au graphe deterministe.",
     render: "C'est la sortie visible : Mermaid, HTML, panneau de details.",
     examples: "Ce sont les preuves locales que le produit fonctionne sur des cas concrets.",
@@ -367,6 +399,10 @@ function groupPlainLanguage(kind, language) {
     cli: "This is the entry door: a user types a command, then Sextant chooses the right action.",
     native: "This is the clean path when writing a new visualizable process from the start.",
     scan: "This is the retrofit path when arriving after the code already exists.",
+    front: "These are places where a user triggers the process from an interface.",
+    route: "These are HTTP doors other layers can call.",
+    data: "These are places where the process touches data.",
+    integration: "These are boundaries with external systems.",
     llm: "This is the pedagogical translator: it explains without touching deterministic graph truth.",
     render: "This is the visible output: Mermaid, HTML, detail panel.",
     examples: "These are local proofs that the product works on concrete cases.",
@@ -382,6 +418,10 @@ function groupEffect(kind, language) {
     cli: "Transforme une intention terminal en action Sextant.",
     native: "Produit un graphe fiable parce que le code est ecrit comme processus.",
     scan: "Produit une premiere carte verifiable depuis du code libre.",
+    front: "Relie les actions utilisateur aux frames scannables.",
+    route: "Expose les transitions entre front, backend et integrations.",
+    data: "Rend visibles les lectures, ecritures et schemas persistants.",
+    integration: "Montre ou le projet sort vers un service tiers.",
     llm: "Ajoute le sens humain, les risques et les decisions probables.",
     render: "Fabrique le rapport que l'on peut ouvrir et partager.",
     examples: "Montre le rendu sans dependance a un vrai projet client.",
@@ -393,6 +433,10 @@ function groupEffect(kind, language) {
     cli: "Turns terminal intent into a Sextant action.",
     native: "Produces a reliable graph because the code is written as a process.",
     scan: "Produces a first verifiable map from free-form code.",
+    front: "Connects user actions to scannable frames.",
+    route: "Shows transitions between frontend, backend, and integrations.",
+    data: "Makes reads, writes, and persistent schemas visible.",
+    integration: "Shows where the project exits to a third-party service.",
     llm: "Adds human meaning, risks, and likely decisions.",
     render: "Builds the report people can open and share.",
     examples: "Shows rendering without depending on a real client project.",
@@ -410,6 +454,22 @@ function shouldSendToProjectLlm(root, file) {
   if (relative.startsWith("examples/") && !/\.(html|mmd|workflow\.json)$/.test(relative)) return true;
   if (relative.startsWith("test/")) return true;
   return false;
+}
+
+function isFrontResource(file) {
+  return /\.(tsx|jsx)$/.test(file) || /(^|[\\/])(components|pages|app|ui)([\\/]|$)/i.test(file);
+}
+
+function isRouteResource(file) {
+  return /(^|[\\/])(api|routes)([\\/]|$)/i.test(file) || /route\.(ts|tsx|js|jsx)$/i.test(file);
+}
+
+function isDataResource(file) {
+  return /schema\.prisma$|migrations?[\\/]|\.sql$|(^|[\\/])(db|database|repositories)([\\/]|$)/i.test(file);
+}
+
+function isIntegrationResource(file) {
+  return /pipedrive|drive|email|mail|webhook|provider|integration|llm/i.test(file);
 }
 
 function isGeneratedArtifact(relative) {

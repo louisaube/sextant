@@ -22,7 +22,7 @@ Puis ouvrir `examples/inscription.html`.
 ```bash
 npx sextant render src/workflows/inscription.workflow.ts -o inscription.html
 npx sextant watch src/workflows/inscription.workflow.ts -o inscription.html
-npx sextant scan src/docagent/index.ts --entry processIncomingAttachment -o docagent.html
+npx sextant scan src/docagent/index.ts --entry processIncomingAttachment --depth 2 -o docagent.html
 npx sextant scan src/docagent/index.ts --entry processIncomingAttachment --llm -o docagent.html
 npx sextant scan-project . -o sextant-project.html --lang fr
 ```
@@ -68,6 +68,17 @@ Options:
 - vue macro, jamais graphe geant.
 
 Cette couche sert a comprendre le projet. Pour verifier un flux reel, utiliser ensuite `scan <file> --entry <name>`.
+
+## Resource frames bornees
+
+`scan` suit les appels locaux avec une profondeur bornee, par defaut `--depth 2`.
+
+- `--depth 0` : seulement le point d'entree.
+- `--depth 1` : appels locaux directs.
+- `--depth 2` : appels directs et appels des sous-frames.
+
+Les frames peuvent etre `code`, `front`, `route`, `data`, `storage` ou `integration`.
+Si Sextant trouve le code local, le rapport ecrit un HTML cliquable pour la frame. Sinon la frontiere reste visible comme frame opaque.
 
 Privacy: `scan-project --llm` envoie plusieurs fichiers source au provider LLM pour produire la lecture globale. Utiliser `scan-project` sans `--llm` pour rester 100% local. Les cles restent uniquement en variables d'environnement et ne doivent jamais etre ecrites dans le repo.
 

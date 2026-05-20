@@ -23,6 +23,15 @@ const copy = {
     pathNodes: "Nodes",
     pathAlways: "always",
     pathTruncated: "Path list truncated",
+    nextFrames: "Next Frames",
+    callTarget: "Call Frame",
+    frameKind: "Kind",
+    frameFile: "File",
+    frameEntry: "Entry",
+    frameSystem: "System",
+    frameOperation: "Operation",
+    frameReason: "Status",
+    openFrame: "Open frame",
     overlayRisks: "Overlay Risks",
     deterministicWarnings: "Deterministic Warnings",
     source: "Source",
@@ -68,6 +77,15 @@ const copy = {
     pathNodes: "Noeuds",
     pathAlways: "toujours",
     pathTruncated: "Liste des chemins tronquee",
+    nextFrames: "Frames suivantes",
+    callTarget: "Frame appelee",
+    frameKind: "Type",
+    frameFile: "Fichier",
+    frameEntry: "Entree",
+    frameSystem: "Systeme",
+    frameOperation: "Operation",
+    frameReason: "Statut",
+    openFrame: "Ouvrir la frame",
     overlayRisks: "Risques de lecture",
     deterministicWarnings: "Alertes deterministes",
     source: "Source",
@@ -398,6 +416,7 @@ ${escapeHtml(mermaid)}
         overlay.effect ? '<section><h3>' + text.overallEffect + '</h3><div class="explain">' + escapeHtml(overlay.effect) + '</div></section>' : '',
         example(overlay.example),
         paths(manifest.analysis),
+        nextFrames(),
         overlay.summary ? '<section><h3>' + text.summary + '</h3><p>' + escapeHtml(overlay.summary) + '</p></section>' : '',
         list(text.overlayFlow, overlay.flow, false),
         list(text.responsibilities, overlay.responsibilities, false),
@@ -421,6 +440,7 @@ ${escapeHtml(mermaid)}
         nodeOverlay.plainLanguage ? '<section><h3>' + text.nodeOverlay + '</h3><div class="explain">' + escapeHtml(nodeOverlay.plainLanguage) + '</div></section>' : '',
         nodeOverlay.effect ? '<section><h3>' + text.localEffect + '</h3><div class="explain">' + escapeHtml(nodeOverlay.effect) + '</div></section>' : '',
         code(details.code),
+        callTarget(details.callTarget, node),
         details.summary ? '<section><h3>' + text.summary + '</h3><p>' + escapeHtml(details.summary) + '</p></section>' : '',
         list(text.rules, details.rules, false),
         list(text.conditions, details.conditions, true),
@@ -449,6 +469,46 @@ ${escapeHtml(mermaid)}
         value.condition ? '<section><h3>' + text.condition + '</h3><code>' + escapeHtml(value.condition) + '</code></section>' : '',
         value.snippet ? '<section><h3>' + text.snippet + '</h3><pre class="code">' + escapeHtml(value.snippet) + '</pre></section>' : ''
       ].join("");
+    }
+
+    function nextFrames() {
+      const frames = manifest.nodes
+        .map((node) => ({ node, target: node.details?.callTarget }))
+        .filter((item) => item.target);
+      if (frames.length === 0) return "";
+      return '<section><h3>' + text.nextFrames + '</h3><ul>' +
+        frames.map(({ node, target }) => '<li><strong>' + escapeHtml(target.kind) + '</strong> ' +
+          escapeHtml(node.label) +
+          (target.entry ? ' <code>' + escapeHtml(target.entry) + '</code>' : '') +
+          (target.reason ? ' <span class="meta">' + escapeHtml(target.reason) + '</span>' : '') +
+          '</li>').join("") +
+        '</ul></section>';
+    }
+
+    function callTarget(value, node) {
+      if (!value) return "";
+      const link = node.subflow ? subflowLinks[node.subflow] : "";
+      return '<section><h3>' + text.callTarget + '</h3>' +
+        '<p><span class="meta">' + text.frameKind + '</span> ' + escapeHtml(value.kind) + '</p>' +
+        (value.file ? '<p><span class="meta">' + text.frameFile + '</span> <code>' + escapeHtml(value.file) + '</code></p>' : '') +
+        (value.entry ? '<p><span class="meta">' + text.frameEntry + '</span> <code>' + escapeHtml(value.entry) + '</code></p>' : '') +
+        (value.system ? '<p><span class="meta">' + text.frameSystem + '</span> ' + escapeHtml(value.system) + '</p>' : '') +
+        (value.operation ? '<p><span class="meta">' + text.frameOperation + '</span> <code>' + escapeHtml(value.operation) + '</code></p>' : '') +
+        (value.reason ? '<p><span class="meta">' + text.frameReason + '</span> ' + escapeHtml(reasonLabel(value.reason)) + '</p>' : '') +
+        (link ? '<p><a href="' + escapeHtml(link) + '">' + text.openFrame + '</a></p>' : '') +
+        '</section>';
+    }
+
+    function reasonLabel(value) {
+      const labels = {
+        "expanded": text.openFrame,
+        "depth-limit": manifest.language === "fr" ? "Frame scannable mais non developpee" : "Scannable frame not expanded",
+        "cycle": manifest.language === "fr" ? "Cycle detecte" : "Cycle detected",
+        "frame-cap": manifest.language === "fr" ? "Limite de frames atteinte" : "Frame limit reached",
+        "opaque": manifest.language === "fr" ? "Frame opaque" : "Opaque frame",
+        "unresolved": manifest.language === "fr" ? "Source non resolue" : "Unresolved source"
+      };
+      return labels[value] || value;
     }
 
     function subflows(values) {

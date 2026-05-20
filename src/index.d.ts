@@ -15,6 +15,15 @@ export interface SextantSource {
   line?: number;
 }
 
+export interface SextantCallTarget {
+  kind: "code" | "front" | "route" | "data" | "storage" | "integration" | "opaque" | "unresolved";
+  file?: string;
+  entry?: string;
+  system?: string;
+  operation?: string;
+  reason?: string;
+}
+
 export interface SextantNodeDetails {
   summary?: string;
   rules?: string[];
@@ -32,6 +41,7 @@ export interface SextantNodeDetails {
     condition?: string;
     snippet?: string;
   };
+  callTarget?: SextantCallTarget;
 }
 
 export interface SextantOverlayNode {
@@ -176,7 +186,7 @@ export declare function getCurrentWorkflow(): ProcessManifest | null;
 
 export declare function inferProcessFromSource(
   source: string,
-  options: { entry: string; file?: string; language?: "en" | "fr"; lang?: "en" | "fr" }
+  options: { entry: string; file?: string; language?: "en" | "fr"; lang?: "en" | "fr"; depth?: number; maxFrames?: number; rootDir?: string }
 ): ProcessManifest;
 
 export declare function inferProjectFromDirectory(

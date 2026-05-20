@@ -129,7 +129,8 @@ async function scanFile(args) {
   const file = path.resolve(input);
   const source = await readFile(file, "utf8");
   const language = normalizeLanguage(args.lang || args.language);
-  let manifest = inferProcessFromSource(source, { entry, file, language });
+  const depth = parseDepth(args);
+  let manifest = inferProcessFromSource(source, { entry, file, language, depth, rootDir: process.cwd() });
 
   if (args.llm) {
     manifest = await enrichManifestWithLlm(source, manifest, {
@@ -280,6 +281,13 @@ function parseLlmTimeout(args) {
   return Number.isFinite(value) && value > 0 ? value : undefined;
 }
 
+function parseDepth(args) {
+  if (args.depth === undefined) return 2;
+  const value = Number(args.depth);
+  if (!Number.isInteger(value) || value < 0) throw new Error("--depth expects a non-negative integer.");
+  return value;
+}
+
 function defaultOutput(input) {
   const parsed = path.parse(input);
   return path.join(parsed.dir, `${parsed.name}.html`);
@@ -304,8 +312,8 @@ Usage:
   sextant init
   sextant render <workflow.ts|workflow.js> -o <report.html> --lang fr
   sextant watch <workflow.ts|workflow.js> -o <report.html> --lang fr
-  sextant scan <file.ts|file.js> --entry <name> -o <report.html> --lang fr
-  sextant scan <file.ts|file.js> --entry <name> --llm --provider deepseek --model deepseek-v4-pro --thinking high --lang fr
+  sextant scan <file.ts|file.js> --entry <name> --depth 2 -o <report.html> --lang fr
+  sextant scan <file.ts|file.js> --entry <name> --depth 2 --llm --provider deepseek --model deepseek-v4-pro --thinking high --lang fr
   sextant scan-project . -o <report.html> --llm --lang fr
 `);
 }

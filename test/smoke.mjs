@@ -15,7 +15,8 @@ import {
   workflow,
   step,
   branch,
-  effect
+  effect,
+  writeReport
 } from "../src/index.js";
 
 const exec = promisify(execFile);
@@ -174,6 +175,61 @@ try {
   assert.equal(hasEdge(braceLess, "branch-1", "step-2", "yes"), true);
   assert.equal(hasEdge(braceLess, "branch-1", "step-3", "no"), true);
   assert.equal(hasEdge(braceLess, "step-2", "step-3"), true);
+
+  const depthSource = "function root(){ normalizeLanguage(); helper(); } function normalizeLanguage(){ return 'fr'; } function helper(){ deep(); } function deep(){ return 'x'; }";
+  const depth0 = inferProcessFromSource(depthSource, { entry: "root", file: path.join(tmp, "depth.ts"), depth: 0 });
+  assert.equal(depth0.subflows.length, 0);
+  assert.equal(depth0.nodes.find((node) => node.details?.code?.call === "normalizeLanguage").details.callTarget.reason, "depth-limit");
+
+  const depth1 = inferProcessFromSource(depthSource, { entry: "root", file: path.join(tmp, "depth.ts"), depth: 1 });
+  assert.equal(depth1.subflows.length, 2);
+  assert.equal(depth1.subflows.find((flow) => flow.id === "helper").nodes.find((node) => node.details?.code?.call === "deep").details.callTarget.reason, "depth-limit");
+
+  const depth2 = inferProcessFromSource(depthSource, { entry: "root", file: path.join(tmp, "depth.ts"), depth: 2 });
+  assert.equal(depth2.subflows.find((flow) => flow.id === "helper").subflows.some((flow) => flow.id === "deep"), true);
+
+  const cycle = inferProcessFromSource("function a(){ b(); } function b(){ a(); }", {
+    entry: "a",
+    file: path.join(tmp, "cycle.ts"),
+    depth: 2
+  });
+  assert.equal(cycle.subflows[0].nodes.find((node) => node.details?.code?.call === "a").details.callTarget.reason, "cycle");
+
+  const dataFrame = inferProcessFromSource("function saveUser(data){ prisma.user.create({ data }); }", {
+    entry: "saveUser",
+    file: path.join(tmp, "db.ts")
+  });
+  assert.equal(dataFrame.nodes.find((node) => node.details?.code?.call === "prisma.user.create").details.callTarget.kind, "data");
+
+  const frontFrame = inferProcessFromSource("function Page(){ return <form onSubmit={handleSubmit}></form>; } function handleSubmit(){ save(); } function save(){ return true; }", {
+    entry: "Page",
+    file: path.join(tmp, "Page.tsx"),
+    depth: 1
+  });
+  const handleNode = frontFrame.nodes.find((node) => node.details?.code?.call === "handleSubmit");
+  assert.equal(handleNode.details.callTarget.kind, "front");
+  assert.equal(handleNode.subflow, "handlesubmit");
+
+  const routeFrame = inferProcessFromSource('function load(){ fetch("/api/users"); }', {
+    entry: "load",
+    file: path.join(tmp, "client.ts")
+  });
+  assert.equal(routeFrame.nodes.find((node) => node.details?.code?.call === "fetch").details.callTarget.kind, "route");
+
+  await writeFile(path.join(tmp, "helper.ts"), "export function importedHelper(){ return 'ok'; }", "utf8");
+  const importedFrame = inferProcessFromSource("import { importedHelper } from './helper'; function root(){ importedHelper(); }", {
+    entry: "root",
+    file: path.join(tmp, "root.ts"),
+    depth: 1
+  });
+  assert.equal(importedFrame.nodes.find((node) => node.details?.code?.call === "importedHelper").details.callTarget.reason, "expanded");
+
+  const frameHtml = toHtml(depth1);
+  assert.match(frameHtml, /Next Frames/);
+  assert.match(frameHtml, /Call Frame/);
+  const frameFiles = await writeReport(depth1, path.join(tmp, "depth.html"));
+  assert.equal(frameFiles.subflows.some((item) => item.id === "normalizelanguage"), true);
+  assert.match(await readFile(path.join(tmp, "depth.html"), "utf8"), /depth\.normalizelanguage\.html/);
 
   const project = await inferProjectFromDirectory(root, { language: "fr" });
   const projectHtml = toHtml(project);
