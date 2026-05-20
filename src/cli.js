@@ -202,7 +202,7 @@ async function transpileWorkflow(file) {
   try {
     ts = await import("typescript");
   } catch {
-    throw new Error("Rendering .ts workflows requires the optional dependency \"typescript\".");
+    throw new Error("Rendering .ts workflows requires the package dependency \"typescript\".");
   }
 
   const source = await readFile(file, "utf8");
@@ -233,23 +233,48 @@ function isManifest(value) {
 function parseArgs(argv) {
   const parsed = { _: [] };
   const booleanFlags = new Set(["llm", "no-cache", "project", "no-thinking"]);
+  const valueFlags = new Set([
+    "provider",
+    "model",
+    "lang",
+    "language",
+    "cache-dir",
+    "llm-timeout-ms",
+    "timeout",
+    "reasoning-effort",
+    "effort",
+    "depth"
+  ]);
 
   for (let index = 0; index < argv.length; index++) {
     const value = argv[index];
+    const readValue = (flag) => {
+      const next = argv[index + 1];
+      if (!next || next.startsWith("-")) throw new Error(`${flag} expects a value.`);
+      index += 1;
+      return next;
+    };
+
     if (value === "-o" || value === "--output") {
-      parsed.output = argv[++index];
+      parsed.output = readValue(value);
       parsed.o = parsed.output;
     } else if (value === "--entry" || value === "--function") {
-      parsed.entry = argv[++index];
+      parsed.entry = readValue(value);
     } else if (value === "--no-cache") {
       parsed.cache = false;
     } else if (value === "--thinking") {
       const next = argv[index + 1];
-      parsed.thinking = next && !next.startsWith("--") ? argv[++index] : true;
-    } else if (booleanFlags.has(value.slice(2))) {
-      parsed[value.slice(2)] = true;
+      parsed.thinking = next && !next.startsWith("-") ? argv[++index] : true;
     } else if (value.startsWith("--")) {
-      parsed[value.slice(2)] = argv[++index] || true;
+      const name = value.slice(2);
+      if (booleanFlags.has(name)) {
+        parsed[name] = true;
+      } else if (valueFlags.has(name)) {
+        parsed[name] = readValue(value);
+      } else {
+        const next = argv[index + 1];
+        parsed[name] = next && !next.startsWith("-") ? argv[++index] : true;
+      }
     } else {
       parsed._.push(value);
     }

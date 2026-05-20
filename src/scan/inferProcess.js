@@ -1,6 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
-import ts from "typescript";
+
+const require = createRequire(import.meta.url);
+let ts;
 
 const effectWords = [
   "send", "email", "mail", "notify", "create", "update", "delete", "save", "write", "persist",
@@ -12,6 +15,7 @@ const defaultDepth = 2;
 const defaultMaxFrames = 32;
 
 export function inferProcessFromSource(source, options = {}) {
+  ensureTypeScript();
   const entry = options.entry;
   if (!entry) throw new Error("inferProcessFromSource expects options.entry.");
 
@@ -38,9 +42,10 @@ export function inferProcessFromSource(source, options = {}) {
 
   const nodes = builder.nodes;
   const edges = builder.edges;
+  const manifestId = options.id || (options.qualifyId ? qualifiedScanId(file, entry, context) : slug(entry));
 
   return {
-    id: slug(entry),
+    id: manifestId,
     title: entry,
     language,
     source: { mode: "scan", file, entry },
@@ -224,6 +229,7 @@ class AstProcessBuilder {
         language: this.language,
         depth: this.depth - 1,
         maxFrames: this.context.maxFrames,
+        qualifyId: true,
         context: this.context
       });
       this.subflows.push(subflow);
@@ -602,6 +608,13 @@ function scanKey(file, entry) {
   return `${path.resolve(file || "unknown")}::${entry}`;
 }
 
+function qualifiedScanId(file, entry, context) {
+  if (!file || file === "unknown") return slug(entry);
+  const root = context?.rootDir || process.cwd();
+  const relative = path.relative(root, path.resolve(file));
+  return slug(`${relative || path.basename(file)}-${entry}`);
+}
+
 function defaultExportName(index) {
   for (const [name, node] of index.locals.entries()) {
     if (node === index.defaultExport) return name;
@@ -793,4 +806,9 @@ function normalizeLanguage(value) {
 function normalizeNumber(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) && number >= 0 ? number : fallback;
+}
+
+function ensureTypeScript() {
+  if (!ts) ts = require("typescript");
+  return ts;
 }

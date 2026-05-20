@@ -44,8 +44,9 @@ export function createDeepSeekProvider(options = {}) {
           "Authorization": `Bearer ${apiKey}`,
           "Content-Type": "application/json"
         },
-        signal: AbortSignal.timeout(requestOptions.timeoutMs || 300000),
         body: JSON.stringify(requestBody)
+      }, {
+        timeoutMs: requestOptions.timeoutMs || 300000
       });
 
       if (!response.ok) {
@@ -126,12 +127,17 @@ Allowed shape:
 }`;
 }
 
-async function postJsonWithRetry(url, options, attempts = 2) {
+async function postJsonWithRetry(url, options, retryOptions = {}) {
+  const attempts = retryOptions.attempts || 2;
+  const timeoutMs = retryOptions.timeoutMs || 300000;
   let lastError;
 
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
-      return await fetch(url, options);
+      return await fetch(url, {
+        ...options,
+        signal: AbortSignal.timeout(timeoutMs)
+      });
     } catch (error) {
       lastError = error;
       if (attempt === attempts || !isRetryableNetworkError(error)) break;

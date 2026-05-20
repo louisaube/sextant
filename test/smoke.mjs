@@ -183,10 +183,10 @@ try {
 
   const depth1 = inferProcessFromSource(depthSource, { entry: "root", file: path.join(tmp, "depth.ts"), depth: 1 });
   assert.equal(depth1.subflows.length, 2);
-  assert.equal(depth1.subflows.find((flow) => flow.id === "helper").nodes.find((node) => node.details?.code?.call === "deep").details.callTarget.reason, "depth-limit");
+  assert.equal(depth1.subflows.find((flow) => flow.id.endsWith("-helper")).nodes.find((node) => node.details?.code?.call === "deep").details.callTarget.reason, "depth-limit");
 
   const depth2 = inferProcessFromSource(depthSource, { entry: "root", file: path.join(tmp, "depth.ts"), depth: 2 });
-  assert.equal(depth2.subflows.find((flow) => flow.id === "helper").subflows.some((flow) => flow.id === "deep"), true);
+  assert.equal(depth2.subflows.find((flow) => flow.id.endsWith("-helper")).subflows.some((flow) => flow.id.endsWith("-deep")), true);
 
   const cycle = inferProcessFromSource("function a(){ b(); } function b(){ a(); }", {
     entry: "a",
@@ -208,7 +208,7 @@ try {
   });
   const handleNode = frontFrame.nodes.find((node) => node.details?.code?.call === "handleSubmit");
   assert.equal(handleNode.details.callTarget.kind, "front");
-  assert.equal(handleNode.subflow, "handlesubmit");
+  assert.equal(handleNode.subflow.endsWith("-handlesubmit"), true);
 
   const routeFrame = inferProcessFromSource('function load(){ fetch("/api/users"); }', {
     entry: "load",
@@ -224,12 +224,23 @@ try {
   });
   assert.equal(importedFrame.nodes.find((node) => node.details?.code?.call === "importedHelper").details.callTarget.reason, "expanded");
 
+  await writeFile(path.join(tmp, "a.ts"), "export function run(){ return 'a'; }", "utf8");
+  await writeFile(path.join(tmp, "b.ts"), "export function run(){ return 'b'; }", "utf8");
+  const homonyms = inferProcessFromSource("import { run as runA } from './a'; import { run as runB } from './b'; function root(){ runA(); runB(); }", {
+    entry: "root",
+    file: path.join(tmp, "homonyms.ts"),
+    depth: 1
+  });
+  assert.deepEqual(homonyms.subflows.map((flow) => flow.id).sort(), ["a-ts-run", "b-ts-run"]);
+  const homonymFiles = await writeReport(homonyms, path.join(tmp, "homonyms.html"));
+  assert.deepEqual(homonymFiles.subflows.map((item) => path.basename(item.html)).sort(), ["homonyms.a-ts-run.html", "homonyms.b-ts-run.html"]);
+
   const frameHtml = toHtml(depth1);
   assert.match(frameHtml, /Next Frames/);
   assert.match(frameHtml, /Call Frame/);
   const frameFiles = await writeReport(depth1, path.join(tmp, "depth.html"));
-  assert.equal(frameFiles.subflows.some((item) => item.id === "normalizelanguage"), true);
-  assert.match(await readFile(path.join(tmp, "depth.html"), "utf8"), /depth\.normalizelanguage\.html/);
+  assert.equal(frameFiles.subflows.some((item) => item.id.endsWith("-normalizelanguage")), true);
+  assert.match(await readFile(path.join(tmp, "depth.html"), "utf8"), /depth\.depth-ts-normalizelanguage\.html/);
 
   const project = await inferProjectFromDirectory(root, { language: "fr" });
   const projectHtml = toHtml(project);
@@ -419,6 +430,22 @@ try {
   );
 
   assert.match(stderr, /DEEPSEEK_API_KEY/);
+
+  const { stderr: parseStderr } = await exec(process.execPath, [
+    path.join(root, "src", "cli.js"),
+    "scan",
+    path.join(root, "examples", "legacy-classify.ts"),
+    "--entry",
+    "classifyAttachment",
+    "--provider",
+    "-o",
+    path.join(tmp, "bad-provider.html")
+  ]).then(
+    () => ({ stderr: "" }),
+    (error) => ({ stderr: error.stderr || "" })
+  );
+
+  assert.match(parseStderr, /--provider expects a value/);
 
   console.log("smoke ok");
 } finally {
