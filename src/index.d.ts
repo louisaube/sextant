@@ -5,6 +5,7 @@ export type SextantNodeType =
   | "effect"
   | "error"
   | "return"
+  | "loop"
   | "subflow";
 
 export interface SextantSource {
@@ -89,6 +90,21 @@ export interface SextantEdge {
   label?: string;
 }
 
+export interface SextantPath {
+  id: string;
+  nodeIds: string[];
+  condition: string[];
+  terminal?: string;
+  outcome?: string;
+}
+
+export interface SextantAnalysis {
+  paths: SextantPath[];
+  pathCount: number;
+  truncated: boolean;
+  maxPaths: number;
+}
+
 export interface ProcessManifest {
   id: string;
   title: string;
@@ -97,6 +113,7 @@ export interface ProcessManifest {
   nodes: SextantNode[];
   edges: SextantEdge[];
   subflows?: ProcessManifest[];
+  analysis?: SextantAnalysis;
   details?: {
     summary?: string;
     risks?: string[];
@@ -185,6 +202,7 @@ export declare function enrichManifestWithLlm(
     model?: string;
     thinking?: boolean | string;
     reasoningEffort?: string;
+    timeoutMs?: number;
     cache?: boolean;
     cacheDir?: string;
     providerInstance?: LlmProvider;
@@ -204,4 +222,9 @@ export declare function toHtml(manifest: ProcessManifest, options?: { mermaid?: 
 export declare function writeReport(
   manifest: ProcessManifest,
   outputFile: string
-): Promise<{ html: string; mermaid: string; manifest: string }>;
+): Promise<{
+  html: string;
+  mermaid: string;
+  manifest: string;
+  subflows?: Array<{ id: string; html: string; mermaid: string; manifest: string }>;
+}>;

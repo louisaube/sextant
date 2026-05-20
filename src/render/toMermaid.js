@@ -5,6 +5,7 @@ const nodeShapes = {
   effect: { open: "[/", close: "/]" },
   error: { open: "{{", close: "}}" },
   return: { open: "([", close: "])" },
+  loop: { open: "{", close: "}" },
   subflow: { open: "[[", close: "]]" }
 };
 
@@ -34,6 +35,7 @@ export function toMermaid(manifest) {
   lines.push("  classDef effect fill:#f7efe2,stroke:#b36b2c,color:#25211b;");
   lines.push("  classDef error fill:#fff0ed,stroke:#c54b3d,color:#25211b;");
   lines.push("  classDef return fill:#f2f1ec,stroke:#8c877d,color:#25211b;");
+  lines.push("  classDef loop fill:#f3ead8,stroke:#8b7355,color:#25211b,stroke-dasharray:3 3;");
   lines.push("  classDef subflow fill:#f6f2e8,stroke:#8b7355,color:#25211b,stroke-dasharray:4 3;");
 
   for (const node of manifest.nodes) {

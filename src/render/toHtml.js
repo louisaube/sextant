@@ -15,6 +15,14 @@ const copy = {
     decisions: "Likely Decisions",
     assumptions: "Assumptions",
     openQuestions: "Open Questions",
+    paths: "Execution Paths",
+    reachedWhen: "Reached When",
+    pathCondition: "Condition",
+    pathOutcome: "Outcome",
+    pathTerminal: "Terminal",
+    pathNodes: "Nodes",
+    pathAlways: "always",
+    pathTruncated: "Path list truncated",
     overlayRisks: "Overlay Risks",
     deterministicWarnings: "Deterministic Warnings",
     source: "Source",
@@ -52,6 +60,14 @@ const copy = {
     decisions: "Decisions probables",
     assumptions: "Hypotheses",
     openQuestions: "Questions a confirmer",
+    paths: "Cas possibles",
+    reachedWhen: "Atteint quand",
+    pathCondition: "Condition",
+    pathOutcome: "Resultat",
+    pathTerminal: "Terminal",
+    pathNodes: "Noeuds",
+    pathAlways: "toujours",
+    pathTruncated: "Liste des chemins tronquee",
     overlayRisks: "Risques de lecture",
     deterministicWarnings: "Alertes deterministes",
     source: "Source",
@@ -83,6 +99,7 @@ export function toHtml(manifest, options = {}) {
   const text = copy[language];
   const title = escapeHtml(manifest.title || manifest.id || "Sextant");
   const manifestJson = JSON.stringify(manifest).replace(/</g, "\\u003c");
+  const subflowLinksJson = JSON.stringify(options.subflowLinks || {}).replace(/</g, "\\u003c");
   const llmBadge = manifest.llm?.enriched
     ? `<span class="badge">${text.llmEnriched} &middot; ${escapeHtml(manifest.llm.provider)} &middot; ${escapeHtml(manifest.llm.model)}${manifest.llm.thinking ? ` &middot; ${text.thinking} ${escapeHtml(manifest.llm.reasoningEffort || "high")}` : ""} &middot; ${text.cache} ${escapeHtml(manifest.llm.cache)}</span>`
     : "";
@@ -227,6 +244,34 @@ export function toHtml(manifest, options = {}) {
       text-transform: uppercase;
     }
 
+    .path-card {
+      margin: 8px 0;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #f7f0e4;
+    }
+
+    .path-card strong {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .path-card p {
+      margin: 4px 0;
+      line-height: 1.4;
+    }
+
+    a {
+      color: #8f4f16;
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
     section {
       margin-top: 20px;
     }
@@ -311,6 +356,7 @@ ${escapeHtml(mermaid)}
 
     const manifest = JSON.parse(document.getElementById("sextant-manifest").textContent);
     const text = ${JSON.stringify(text).replace(/</g, "\\u003c")};
+    const subflowLinks = ${subflowLinksJson};
     const nodes = new Map(manifest.nodes.map((node) => [node.id, node]));
     const overlay = manifest.overlay || {};
     const overlayNodes = new Map((overlay.nodes || []).map((node) => [node.id, node]));
@@ -351,6 +397,7 @@ ${escapeHtml(mermaid)}
         overlay.plainLanguage ? '<section><h3>' + text.forNonDeveloper + '</h3><div class="explain">' + escapeHtml(overlay.plainLanguage) + '</div></section>' : '',
         overlay.effect ? '<section><h3>' + text.overallEffect + '</h3><div class="explain">' + escapeHtml(overlay.effect) + '</div></section>' : '',
         example(overlay.example),
+        paths(manifest.analysis),
         overlay.summary ? '<section><h3>' + text.summary + '</h3><p>' + escapeHtml(overlay.summary) + '</p></section>' : '',
         list(text.overlayFlow, overlay.flow, false),
         list(text.responsibilities, overlay.responsibilities, false),
@@ -380,9 +427,10 @@ ${escapeHtml(mermaid)}
         list(text.filters, details.filters, true),
         list(text.inputs, details.inputs, true),
         list(text.outputs, details.outputs, true),
+        list(text.reachedWhen, reachedWhen(node.id), false),
         list(text.overlayResponsibilities, nodeOverlay.responsibilities, false),
         source(details.source),
-        node.subflow ? '<section><h3>' + text.subflow + '</h3><code>' + escapeHtml(node.subflow) + '</code></section>' : ''
+        subflow(node)
       ].join("");
     }
 
@@ -409,6 +457,35 @@ ${escapeHtml(mermaid)}
         values.map((value) => '<li><strong>' + escapeHtml(value.label || value.id) + '</strong>' +
           (value.summary ? '<br>' + escapeHtml(value.summary) : '') + '</li>').join("") +
         '</ul></section>';
+    }
+
+    function paths(analysis) {
+      if (!analysis || !analysis.paths || analysis.paths.length === 0) return "";
+      return '<section><h3>' + text.paths + '</h3>' +
+        (analysis.truncated ? '<p class="empty">' + text.pathTruncated + ' (' + escapeHtml(analysis.maxPaths) + ')</p>' : '') +
+        analysis.paths.map((path) => '<div class="path-card"><strong>' + escapeHtml(path.id) + '</strong>' +
+          '<p><span class="meta">' + text.pathCondition + '</span> ' + escapeHtml(path.condition && path.condition.length ? path.condition.join(' + ') : text.pathAlways) + '</p>' +
+          (path.outcome ? '<p><span class="meta">' + text.pathOutcome + '</span> <code>' + escapeHtml(path.outcome) + '</code></p>' : '') +
+          (path.terminal ? '<p><span class="meta">' + text.pathTerminal + '</span> <code>' + escapeHtml(path.terminal) + '</code></p>' : '') +
+          '<p><span class="meta">' + text.pathNodes + '</span> ' + escapeHtml(path.nodeIds ? path.nodeIds.length : 0) + '</p>' +
+        '</div>').join('') +
+        '</section>';
+    }
+
+    function reachedWhen(nodeId) {
+      const values = (manifest.analysis?.paths || [])
+        .filter((path) => path.nodeIds && path.nodeIds.includes(nodeId))
+        .map((path) => path.id + ': ' + (path.condition && path.condition.length ? path.condition.join(' + ') : text.pathAlways));
+      return [...new Set(values)];
+    }
+
+    function subflow(node) {
+      if (!node.subflow) return "";
+      const link = subflowLinks[node.subflow];
+      if (link) {
+        return '<section><h3>' + text.subflow + '</h3><a href="' + escapeHtml(link) + '">' + escapeHtml(node.subflow) + '</a></section>';
+      }
+      return '<section><h3>' + text.subflow + '</h3><code>' + escapeHtml(node.subflow) + '</code></section>';
     }
 
     function example(value) {

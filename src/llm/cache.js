@@ -23,6 +23,7 @@ export async function readCache(key, cacheDir = ".sextant-cache/llm") {
     return JSON.parse(await readFile(file, "utf8"));
   } catch (error) {
     if (error.code === "ENOENT") return null;
+    if (error instanceof SyntaxError) return null;
     throw error;
   }
 }

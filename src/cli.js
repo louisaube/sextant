@@ -140,6 +140,7 @@ async function scanFile(args) {
       model: args.model || "deepseek-v4-pro",
       thinking: parseThinking(args),
       reasoningEffort: parseReasoningEffort(args),
+      timeoutMs: parseLlmTimeout(args),
       cache: args.cache !== false,
       cacheDir: args["cache-dir"]
     });
@@ -166,6 +167,7 @@ async function scanProject(args) {
       model: args.model || "deepseek-v4-pro",
       thinking: parseThinking(args),
       reasoningEffort: parseReasoningEffort(args),
+      timeoutMs: parseLlmTimeout(args),
       cache: args.cache !== false,
       cacheDir: args["cache-dir"]
     });
@@ -269,6 +271,13 @@ function parseReasoningEffort(args) {
   if (args.thinking === "max") return "max";
   if (args.thinking === "high") return "high";
   return "high";
+}
+
+function parseLlmTimeout(args) {
+  const raw = args["llm-timeout-ms"] || args.timeout;
+  if (!raw) return undefined;
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? value : undefined;
 }
 
 function defaultOutput(input) {

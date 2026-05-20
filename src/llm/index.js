@@ -28,7 +28,8 @@ export async function enrichManifestWithLlm(source, manifest, options = {}) {
     raw = await provider.enrichProcess(context, {
       model,
       thinking,
-      reasoningEffort
+      reasoningEffort,
+      timeoutMs: options.timeoutMs
     });
   }
 

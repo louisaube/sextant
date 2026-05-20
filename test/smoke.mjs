@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -58,10 +58,13 @@ try {
   ]);
 
   const html = await readFile(path.join(tmp, "inscription.html"), "utf8");
+  const subflowHtml = await readFile(path.join(tmp, "inscription.validation-dossier.html"), "utf8");
   assert.match(html, /securityLevel: "loose"/);
   assert.match(html, /layout: "elk"/);
   assert.match(html, /sextantShowNode/);
   assert.match(html, /Interpretive Overlay/);
+  assert.match(html, /inscription\.validation-dossier\.html/);
+  assert.match(subflowHtml, /Validation dossier/);
 
   const legacySource = await readFile(path.join(root, "examples", "legacy-classify.ts"), "utf8");
   const inferred = inferProcessFromSource(legacySource, {
@@ -76,14 +79,20 @@ try {
   assert.equal(inferred.edges.some((edge) => edge.from === "branch-2" && edge.to === "effect-5" && edge.label === "no"), true);
   assert.equal(inferred.nodes.find((node) => node.id === "effect-5").details.source.line, 9);
   assert.equal(inferred.nodes.find((node) => node.id === "branch-2").details.code.condition, "documentType.confidence < 0.85");
-  assert.match(inferred.nodes.find((node) => node.id === "branch-2").details.code.snippet, /if \(documentType\.confidence/);
+  assert.match(inferred.nodes.find((node) => node.id === "branch-2").details.code.snippet, /documentType\.confidence/);
   assert.equal(inferred.nodes.find((node) => node.id === "branch-2").details.plainLanguage, undefined);
   assert.match(inferred.overlay.nodes.find((node) => node.id === "branch-2").plainLanguage, /Decide whether/);
   assert.match(inferred.overlay.effect, /saveToDrive/);
   assert.equal(inferred.overlay.example.input, "classifyAttachment(...)");
+  assert.equal(inferred.analysis.pathCount, 2);
+  assert.deepEqual(inferred.analysis.paths[0].condition, ["documentType.confidence < 0.85"]);
+  assert.equal(inferred.analysis.paths[0].outcome, "return \"REVIEW_NEEDED\";");
+  assert.deepEqual(inferred.analysis.paths[1].condition, ["¬(documentType.confidence < 0.85)"]);
+  assert.equal(inferred.analysis.paths[1].outcome, "return documentType.category;");
   const inferredHtml = toHtml(inferred);
   assert.match(inferredHtml, /For a non-developer/);
   assert.match(inferredHtml, /Overall Effect/);
+  assert.match(inferredHtml, /Execution Paths/);
   assert.equal(inferred.nodes.find((node) => node.id === "effect-5").details.code.call, "saveToDrive");
   assert.match(inferred.nodes.find((node) => node.id === "effect-5").details.code.snippet, /const driveFile = await saveToDrive/);
 
@@ -98,6 +107,8 @@ try {
   assert.match(inferredFrHtml, /<html lang="fr">/);
   assert.match(inferredFrHtml, /Surcouche explicative/);
   assert.match(inferredFrHtml, /Effet global/);
+  assert.match(inferredFrHtml, /Cas possibles/);
+  assert.match(inferredFrHtml, /Atteint quand/);
 
   const routerSource = await readFile(path.join(root, "src", "cli.js"), "utf8");
   const router = inferProcessFromSource(routerSource, {
@@ -111,6 +122,58 @@ try {
   assert.equal(router.nodes.find((node) => node.id === "step-20").label, "Scan File");
   assert.match(router.overlay.effect, /one typed command/);
   assert.match(router.overlay.example.output, /writes report.html/);
+
+  const ifElse = inferProcessFromSource("function f(){ if (a) { yesCall(); } else { noCall(); } done(); }", {
+    entry: "f",
+    file: "fixture.ts"
+  });
+  assert.equal(hasEdge(ifElse, "branch-1", "step-2", "yes"), true);
+  assert.equal(hasEdge(ifElse, "branch-1", "step-3", "no"), true);
+  assert.equal(hasEdge(ifElse, "step-2", "step-3"), false);
+  assert.equal(hasEdge(ifElse, "step-2", "step-4"), true);
+  assert.equal(hasEdge(ifElse, "step-3", "step-4"), true);
+
+  const elseIf = inferProcessFromSource("function f(){ if (a) aCall(); else if (b) bCall(); else cCall(); done(); }", {
+    entry: "f",
+    file: "fixture.ts"
+  });
+  assert.equal(hasEdge(elseIf, "branch-1", "branch-3", "no"), true);
+  assert.equal(hasEdge(elseIf, "branch-3", "step-4", "yes"), true);
+  assert.equal(hasEdge(elseIf, "branch-3", "step-5", "no"), true);
+
+  const switchScan = inferProcessFromSource('function f(){ switch(kind){ case "a": aCall(); break; default: dCall(); } done(); }', {
+    entry: "f",
+    file: "fixture.ts"
+  });
+  assert.equal(hasEdge(switchScan, "branch-1", "step-2", 'case "a"'), true);
+  assert.equal(hasEdge(switchScan, "branch-1", "step-3", "default"), true);
+  assert.deepEqual(switchScan.analysis.paths.map((item) => item.condition[0]), ['kind === "a"', "default"]);
+
+  const tryScan = inferProcessFromSource("function f(){ try { aCall(); } catch (error) { bCall(); } finally { cCall(); } done(); }", {
+    entry: "f",
+    file: "fixture.ts"
+  });
+  assert.equal(hasEdge(tryScan, "branch-1", "step-2", "try"), true);
+  assert.equal(hasEdge(tryScan, "branch-1", "step-3", "catch"), true);
+  assert.equal(hasEdge(tryScan, "step-2", "step-4"), true);
+  assert.equal(hasEdge(tryScan, "step-3", "step-4"), true);
+
+  const loopScan = inferProcessFromSource("function f(){ while (ready) { bodyCall(); } done(); }", {
+    entry: "f",
+    file: "fixture.ts"
+  });
+  assert.equal(loopScan.nodes.find((node) => node.id === "loop-1").type, "loop");
+  assert.equal(hasEdge(loopScan, "loop-1", "step-2", "body"), true);
+  assert.equal(hasEdge(loopScan, "step-2", "loop-1", "repeat"), true);
+  assert.equal(loopScan.analysis.truncated, false);
+
+  const braceLess = inferProcessFromSource("function f(){ if (ready) bodyCall(); done(); }", {
+    entry: "f",
+    file: "fixture.ts"
+  });
+  assert.equal(hasEdge(braceLess, "branch-1", "step-2", "yes"), true);
+  assert.equal(hasEdge(braceLess, "branch-1", "step-3", "no"), true);
+  assert.equal(hasEdge(braceLess, "step-2", "step-3"), true);
 
   const project = await inferProjectFromDirectory(root, { language: "fr" });
   const projectHtml = toHtml(project);
@@ -205,6 +268,30 @@ try {
   assert.deepEqual(cached.nodes, inferred.nodes);
   assert.equal(provider.calls, 1);
 
+  const corruptProvider = createMockProvider({
+    version: 1,
+    overlay: {
+      plainLanguage: "Recovered after corrupt cache."
+    }
+  });
+  const corruptDir = path.join(tmp, "corrupt-cache");
+  await enrichManifestWithLlm(legacySource, inferred, {
+    provider: "mock",
+    model: "corrupt-model",
+    providerInstance: corruptProvider,
+    cacheDir: corruptDir
+  });
+  const corruptFiles = await readdir(corruptDir);
+  await writeFile(path.join(corruptDir, corruptFiles[0]), "{bad json", "utf8");
+  const recoveredCorrupt = await enrichManifestWithLlm(legacySource, inferred, {
+    provider: "mock",
+    model: "corrupt-model",
+    providerInstance: corruptProvider,
+    cacheDir: corruptDir
+  });
+  assert.equal(recoveredCorrupt.llm.cache, "miss");
+  assert.equal(corruptProvider.calls, 2);
+
   await enrichManifestWithLlm(legacySource, inferred, {
     provider: "mock",
     model: "mock-model",
@@ -280,4 +367,12 @@ try {
   console.log("smoke ok");
 } finally {
   await rm(tmp, { recursive: true, force: true });
+}
+
+function hasEdge(manifest, from, to, label) {
+  return manifest.edges.some((edge) =>
+    edge.from === from &&
+    edge.to === to &&
+    (label === undefined ? edge.label === undefined : edge.label === label)
+  );
 }

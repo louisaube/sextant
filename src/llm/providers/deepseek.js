@@ -38,13 +38,13 @@ export function createDeepSeekProvider(options = {}) {
         requestBody.temperature = 0.1;
       }
 
-      const response = await fetch("https://api.deepseek.com/chat/completions", {
+      const response = await postJsonWithRetry("https://api.deepseek.com/chat/completions", {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${apiKey}`,
           "Content-Type": "application/json"
         },
-        signal: AbortSignal.timeout(requestOptions.timeoutMs || 120000),
+        signal: AbortSignal.timeout(requestOptions.timeoutMs || 300000),
         body: JSON.stringify(requestBody)
       });
 
@@ -124,6 +124,25 @@ Allowed shape:
     ]
   }
 }`;
+}
+
+async function postJsonWithRetry(url, options, attempts = 2) {
+  let lastError;
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await fetch(url, options);
+    } catch (error) {
+      lastError = error;
+      if (attempt === attempts || !isRetryableNetworkError(error)) break;
+    }
+  }
+
+  throw lastError;
+}
+
+function isRetryableNetworkError(error) {
+  return error?.name === "TypeError" || error?.cause?.code === "UND_ERR_CONNECT_TIMEOUT";
 }
 
 function normalizeThinking(value) {

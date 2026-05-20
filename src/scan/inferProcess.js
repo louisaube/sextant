@@ -1,3 +1,5 @@
+import ts from "typescript";
+
 const effectWords = [
   "send",
   "email",
@@ -19,88 +21,30 @@ const effectWords = [
   "db"
 ];
 
+const defaultMaxPaths = 64;
+
 export function inferProcessFromSource(source, options) {
   const entry = options.entry;
   const file = options.file || "unknown";
   const language = normalizeLanguage(options.language || options.lang);
-  const extracted = extractFunctionBody(source, entry);
-  const lines = usefulLines(extracted.body, extracted.startLine);
-  const nodes = [
-    {
-      id: "entry-0",
-      type: "entry",
-      label: entry,
-      details: {
-        summary: "Entry point inferred from existing code.",
-        source: { file }
-      }
-    }
-  ];
-  const edges = [];
-  let previous = {
-    id: nodes[0].id,
-    type: nodes[0].type,
-    depth: -1
-  };
-  let pendingFalseEdges = [];
-  let index = 1;
+  const sourceFile = ts.createSourceFile(
+    file,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    scriptKind(file)
+  );
+  const entryNode = findEntry(sourceFile, entry);
+  const builder = new AstProcessBuilder(sourceFile, file, entry, language);
+  const body = entryNode.body;
 
-  for (const line of lines) {
-    const inferred = inferLine(line);
-    if (!inferred) continue;
-
-    const node = {
-      id: `${inferred.type}-${index}`,
-      type: inferred.type,
-      label: inferred.label,
-      details: {
-        summary: "Inferred from source line. Retrofit mode is approximate.",
-        conditions: inferred.condition ? [inferred.condition] : [],
-        filters: [],
-        rules: [],
-        inputs: [],
-        outputs: inferred.type === "branch" ? ["yes", "no"] : [],
-        code: inferred.code,
-        source: {
-          file,
-          line: line.number
-        }
-      }
-    };
-
-    nodes.push(node);
-
-    const falseEdges = pendingFalseEdges.filter((edge) => line.depth <= edge.depth);
-    pendingFalseEdges = pendingFalseEdges.filter((edge) => line.depth > edge.depth);
-
-    if (previous) {
-      edges.push({
-        from: previous.id,
-        to: node.id,
-        ...(previous.type === "branch" && line.depth > previous.depth ? { label: "yes" } : {})
-      });
-    }
-
-    for (const edge of falseEdges) {
-      edges.push({ from: edge.from, to: node.id, label: "no" });
-    }
-
-    if (inferred.type === "branch") {
-      pendingFalseEdges.push({
-        from: node.id,
-        depth: line.depth
-      });
-    }
-
-    previous = isTerminal(inferred.type)
-      ? null
-      : {
-          id: node.id,
-          type: inferred.type,
-          depth: line.depth
-        };
-    index++;
+  if (!body || !ts.isBlock(body)) {
+    throw new Error(`Entry "${entry}" does not look like a block function.`);
   }
+
+  builder.emitStatements(body.statements, [builder.entryCursor]);
+  const nodes = builder.nodes;
+  const edges = builder.edges;
 
   return {
     id: slug(entry),
@@ -115,132 +59,413 @@ export function inferProcessFromSource(source, options) {
       summary: language === "fr" ? `Scan retrofit de ${entry}.` : `Retrofit scan of ${entry}.`,
       risks: [
         language === "fr"
-          ? "Le mode retrofit est approximatif : verifier les snippets et les lignes source avant de faire confiance au graphe."
-          : "Retrofit mode is approximate: review snippets and source lines before trusting the graph."
+          ? "Le mode retrofit est approximatif : verifier les snippets, les chemins et les lignes source avant de faire confiance au graphe."
+          : "Retrofit mode is approximate: review snippets, paths, and source lines before trusting the graph."
       ]
     },
     overlay: buildOverlay(entry, file, nodes, language),
+    analysis: buildAnalysis(nodes, edges, { maxPaths: defaultMaxPaths }),
     nodes,
     edges,
     subflows: []
   };
 }
 
-function extractFunctionBody(source, entry) {
-  const patterns = [
-    new RegExp(`(?:export\\s+)?(?:async\\s+)?function\\s+${escapeRegExp(entry)}\\s*\\(`),
-    new RegExp(`(?:export\\s+)?const\\s+${escapeRegExp(entry)}\\s*=\\s*(?:async\\s*)?\\([^)]*\\)\\s*=>`),
-    new RegExp(`(?:export\\s+)?const\\s+${escapeRegExp(entry)}\\s*=\\s*(?:async\\s*)?[^=]*=>`)
-  ];
-
-  const match = patterns.map((pattern) => pattern.exec(source)).find(Boolean);
-  if (!match) {
-    throw new Error(`Could not find entry "${entry}".`);
-  }
-
-  const openIndex = source.indexOf("{", match.index);
-  if (openIndex === -1) {
-    throw new Error(`Entry "${entry}" does not look like a block function.`);
-  }
-
-  let depth = 0;
-  for (let index = openIndex; index < source.length; index++) {
-    const char = source[index];
-    if (char === "{") depth++;
-    if (char === "}") depth--;
-    if (depth === 0) {
-      return {
-        body: source.slice(openIndex + 1, index),
-        startLine: lineNumberAt(source, openIndex + 1)
-      };
-    }
-  }
-
-  throw new Error(`Could not parse body for "${entry}".`);
-}
-
-function usefulLines(body, startLine) {
-  const lines = [];
-  let depth = 0;
-
-  body.split(/\r?\n/).forEach((rawText, offset) => {
-    const trimmed = rawText.replace(/\/\/.*$/, "").trim();
-    const leadingClose = trimmed.match(/^\}+/)?.[0].length || 0;
-    const lineDepth = Math.max(0, depth - leadingClose);
-    const text = trimmed.replace(/^\}\s*/, "");
-    const openCount = countChar(trimmed, "{");
-    const closeCount = countChar(trimmed, "}");
-
-    depth = Math.max(0, depth + openCount - closeCount);
-
-    if (!text || text === "{" || text === "}") return;
-
-    lines.push({
-      number: startLine + offset,
-      text,
-      depth: lineDepth
+class AstProcessBuilder {
+  constructor(sourceFile, file, entry, language) {
+    this.sourceFile = sourceFile;
+    this.file = file;
+    this.entry = entry;
+    this.language = language;
+    this.nodes = [];
+    this.edges = [];
+    this.index = 0;
+    this.entryNode = this.createNode("entry", entry, sourceFile, {
+      summary: "Entry point inferred from existing code."
     });
-  });
+    this.entryCursor = { nodeId: this.entryNode.id };
+  }
 
-  return lines;
-}
+  emitStatements(statements, cursors) {
+    let current = cursors;
 
-function isTerminal(type) {
-  return type === "return" || type === "error";
-}
+    for (const statement of statements) {
+      if (current.length === 0) break;
+      current = this.emitStatement(statement, current);
+    }
 
-function inferLine(line) {
-  const text = line.text;
+    return current;
+  }
 
-  if (/^(if|else\s+if|switch)\b/.test(text)) {
-    const condition = extractCondition(text);
-    return {
-      type: "branch",
-      label: cleanDecision(text),
-      condition,
+  emitStatement(statement, cursors) {
+    if (ts.isBlock(statement)) {
+      return this.emitStatements(statement.statements, cursors);
+    }
+
+    if (ts.isIfStatement(statement)) return this.emitIf(statement, cursors);
+    if (ts.isSwitchStatement(statement)) return this.emitSwitch(statement, cursors);
+    if (ts.isTryStatement(statement)) return this.emitTry(statement, cursors);
+    if (isLoop(statement)) return this.emitLoop(statement, cursors);
+    if (ts.isReturnStatement(statement)) return this.emitReturn(statement, cursors);
+    if (ts.isThrowStatement(statement)) return this.emitThrow(statement, cursors);
+
+    if (!ts.isExpressionStatement(statement) && !ts.isVariableStatement(statement)) return cursors;
+
+    const call = firstCall(statement);
+    if (!call) return cursors;
+
+    const callee = call.expression.getText(this.sourceFile);
+    const node = this.createNode(
+      looksLikeEffect(callee, statement.getText(this.sourceFile)) ? "effect" : "step",
+      humanizeCall(callee),
+      statement,
+      {
+        summary: "Inferred from AST statement. Retrofit mode is approximate.",
+        code: {
+          kind: "call",
+          call: callee,
+          snippet: snippet(statement.getText(this.sourceFile))
+        }
+      }
+    );
+    this.connect(cursors, node.id);
+    return [{ nodeId: node.id }];
+  }
+
+  emitIf(statement, cursors) {
+    const condition = cleanText(statement.expression.getText(this.sourceFile));
+    const branch = this.createNode("branch", compact(`if (${condition})`), statement.expression, {
+      summary: "Inferred from AST if statement. Retrofit mode is approximate.",
+      conditions: [condition],
+      outputs: ["yes", "no"],
       code: {
         kind: "condition",
         condition,
-        snippet: snippet(text)
+        snippet: snippet(statement.expression.getText(this.sourceFile))
       }
-    };
+    });
+
+    this.connect(cursors, branch.id);
+
+    const thenOut = this.emitStatement(statement.thenStatement, [{ nodeId: branch.id, label: "yes" }]);
+    const elseOut = statement.elseStatement
+      ? this.emitStatement(statement.elseStatement, [{ nodeId: branch.id, label: "no" }])
+      : [{ nodeId: branch.id, label: "no" }];
+
+    return [...thenOut, ...elseOut];
   }
 
-  if (/^throw\b/.test(text)) {
-    return {
-      type: "error",
-      label: compact(text),
+  emitSwitch(statement, cursors) {
+    const expression = cleanText(statement.expression.getText(this.sourceFile));
+    const branch = this.createNode("branch", compact(`switch (${expression})`), statement.expression, {
+      summary: "Inferred from AST switch statement. Retrofit mode is approximate.",
+      conditions: [expression],
+      outputs: statement.caseBlock.clauses.map((clause) => caseLabel(clause, this.sourceFile)),
       code: {
-        kind: "throw",
-        snippet: snippet(text)
+        kind: "condition",
+        condition: expression,
+        snippet: snippet(statement.expression.getText(this.sourceFile))
       }
-    };
+    });
+    const outs = [];
+    let hasDefault = false;
+
+    this.connect(cursors, branch.id);
+
+    for (const clause of statement.caseBlock.clauses) {
+      const label = caseLabel(clause, this.sourceFile);
+      if (label === "default") hasDefault = true;
+      const armOut = clause.statements.length > 0
+        ? this.emitStatements(clause.statements, [{ nodeId: branch.id, label }])
+        : [{ nodeId: branch.id, label }];
+      outs.push(...armOut);
+    }
+
+    if (!hasDefault) outs.push({ nodeId: branch.id, label: "default" });
+    return outs;
   }
 
-  if (/^return\b/.test(text)) {
-    return {
-      type: "return",
-      label: compact(text),
+  emitTry(statement, cursors) {
+    const outputs = statement.catchClause ? ["try", "catch"] : ["try"];
+    const branch = this.createNode("branch", "try", statement, {
+      summary: "Inferred from AST try/catch statement. Retrofit mode is approximate.",
+      outputs,
+      code: {
+        kind: "condition",
+        condition: "try",
+        snippet: snippet("try")
+      }
+    });
+    this.connect(cursors, branch.id);
+
+    const tryOut = this.emitStatements(statement.tryBlock.statements, [{ nodeId: branch.id, label: "try" }]);
+    const catchOut = statement.catchClause
+      ? this.emitStatement(statement.catchClause.block, [{ nodeId: branch.id, label: "catch" }])
+      : [];
+    const combined = [...tryOut, ...catchOut];
+
+    return statement.finallyBlock ? this.emitStatements(statement.finallyBlock.statements, combined) : combined;
+  }
+
+  emitLoop(statement, cursors) {
+    const condition = loopCondition(statement, this.sourceFile);
+    const loop = this.createNode("loop", compact(loopLabel(statement, this.sourceFile)), statement, {
+      summary: "Inferred from AST loop statement. Paths traverse the loop body at most once.",
+      conditions: condition ? [condition] : [],
+      outputs: ["body", "exit"],
+      code: {
+        kind: "condition",
+        condition,
+        snippet: snippet(statement.getText(this.sourceFile))
+      }
+    });
+
+    this.connect(cursors, loop.id);
+    const bodyOut = this.emitStatement(statement.statement, [{ nodeId: loop.id, label: "body" }]);
+
+    for (const cursor of bodyOut) {
+      this.addEdge(cursor.nodeId, loop.id, "repeat");
+    }
+
+    return [
+      { nodeId: loop.id, label: "exit" },
+      ...bodyOut.map((cursor) => ({ nodeId: cursor.nodeId, label: "exit" }))
+    ];
+  }
+
+  emitReturn(statement, cursors) {
+    const text = statement.getText(this.sourceFile);
+    const node = this.createNode("return", compact(text), statement, {
+      summary: "Inferred from AST return statement. Retrofit mode is approximate.",
       code: {
         kind: "return",
         snippet: snippet(text)
       }
-    };
+    });
+    this.connect(cursors, node.id);
+    return [];
   }
 
-  const call = firstCallName(text);
-  if (!call) return null;
+  emitThrow(statement, cursors) {
+    const text = statement.getText(this.sourceFile);
+    const node = this.createNode("error", compact(text), statement, {
+      summary: "Inferred from AST throw statement. Retrofit mode is approximate.",
+      code: {
+        kind: "throw",
+        snippet: snippet(text)
+      }
+    });
+    this.connect(cursors, node.id);
+    return [];
+  }
+
+  createNode(type, label, astNode, details = {}, extra = {}) {
+    const id = `${type}-${this.index++}`;
+    const node = {
+      id,
+      type,
+      label: label || type,
+      details: normalizeDetails({
+        summary: "Inferred from AST node. Retrofit mode is approximate.",
+        ...details,
+        source: {
+          file: this.file,
+          line: lineNumber(this.sourceFile, astNode)
+        }
+      }),
+      ...extra
+    };
+    this.nodes.push(node);
+    return node;
+  }
+
+  connect(cursors, to) {
+    for (const cursor of cursors) {
+      this.addEdge(cursor.nodeId, to, cursor.label);
+    }
+  }
+
+  addEdge(from, to, label) {
+    if (!from || !to) return;
+    if (this.edges.some((edge) => edge.from === from && edge.to === to && edge.label === label)) return;
+    this.edges.push({
+      from,
+      to,
+      ...(label ? { label } : {})
+    });
+  }
+}
+
+function findEntry(sourceFile, entry) {
+  for (const statement of sourceFile.statements) {
+    if (ts.isFunctionDeclaration(statement) && statement.name?.text === entry) return statement;
+
+    if (!ts.isVariableStatement(statement)) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      if (!ts.isIdentifier(declaration.name) || declaration.name.text !== entry) continue;
+      if (declaration.initializer && (ts.isArrowFunction(declaration.initializer) || ts.isFunctionExpression(declaration.initializer))) {
+        return declaration.initializer;
+      }
+    }
+  }
+
+  throw new Error(`Could not find entry "${entry}".`);
+}
+
+function buildAnalysis(nodes, edges, options = {}) {
+  const maxPaths = options.maxPaths || defaultMaxPaths;
+  const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+  const outgoing = new Map();
+  const paths = [];
+  let truncated = false;
+
+  for (const edge of edges) {
+    if (!outgoing.has(edge.from)) outgoing.set(edge.from, []);
+    outgoing.get(edge.from).push(edge);
+  }
+
+  dfs("entry-0", [], []);
 
   return {
-    type: looksLikeEffect(call, text) ? "effect" : "step",
-    label: humanizeCall(call),
-    call,
-    code: {
-      kind: "call",
-      call,
-      snippet: snippet(text)
-    }
+    paths,
+    pathCount: paths.length,
+    truncated,
+    maxPaths
   };
+
+  function dfs(nodeId, path, conditions) {
+    if (paths.length >= maxPaths) {
+      truncated = true;
+      return;
+    }
+
+    if (path.includes(nodeId)) return;
+
+    const node = nodeMap.get(nodeId);
+    if (!node) return;
+
+    const nextPath = [...path, nodeId];
+    const nextEdges = (outgoing.get(nodeId) || []).filter((edge) => edge.label !== "repeat");
+
+    if (isTerminalNode(node) || nextEdges.length === 0) {
+      paths.push({
+        id: `path-${paths.length + 1}`,
+        nodeIds: nextPath,
+        condition: conditions,
+        terminal: nodeId,
+        outcome: outcome(node)
+      });
+      return;
+    }
+
+    for (const edge of nextEdges) {
+      dfs(edge.to, nextPath, [...conditions, ...conditionsForEdge(edge, node)]);
+    }
+  }
+}
+
+function conditionsForEdge(edge, node) {
+  const label = edge.label;
+  const condition = node.details?.code?.condition || node.details?.conditions?.[0];
+
+  if (!label) return [];
+  if (node.type === "loop") {
+    if (label === "body") return condition ? [condition] : [];
+    if (label === "exit") return condition ? [`\u00ac(${condition})`] : [];
+    return [];
+  }
+  if (label === "yes") return condition ? [condition] : [];
+  if (label === "no") return condition ? [`\u00ac(${condition})`] : [];
+  if (label.startsWith("case ")) return condition ? [`${condition} === ${label.slice(5)}`] : [label];
+  if (label === "default") return ["default"];
+  if (label === "catch") return ["catch"];
+  return [];
+}
+
+function outcome(node) {
+  return node.details?.code?.snippet || node.label;
+}
+
+function isTerminalNode(node) {
+  return node.type === "return" || node.type === "error";
+}
+
+function isLoop(node) {
+  return ts.isForStatement(node) ||
+    ts.isForInStatement(node) ||
+    ts.isForOfStatement(node) ||
+    ts.isWhileStatement(node) ||
+    ts.isDoStatement(node);
+}
+
+function loopCondition(node, sourceFile) {
+  if (ts.isWhileStatement(node) || ts.isDoStatement(node)) return cleanText(node.expression.getText(sourceFile));
+  if (ts.isForStatement(node)) return node.condition ? cleanText(node.condition.getText(sourceFile)) : "for";
+  if (ts.isForInStatement(node)) return cleanText(`${node.initializer.getText(sourceFile)} in ${node.expression.getText(sourceFile)}`);
+  if (ts.isForOfStatement(node)) return cleanText(`${node.initializer.getText(sourceFile)} of ${node.expression.getText(sourceFile)}`);
+  return "";
+}
+
+function loopLabel(node, sourceFile) {
+  if (ts.isWhileStatement(node)) return `while (${node.expression.getText(sourceFile)})`;
+  if (ts.isDoStatement(node)) return `do while (${node.expression.getText(sourceFile)})`;
+  if (ts.isForStatement(node)) return compact(node.getText(sourceFile).split("{")[0].trim());
+  if (ts.isForInStatement(node)) return `for (${node.initializer.getText(sourceFile)} in ${node.expression.getText(sourceFile)})`;
+  if (ts.isForOfStatement(node)) return `for (${node.initializer.getText(sourceFile)} of ${node.expression.getText(sourceFile)})`;
+  return "loop";
+}
+
+function firstCall(node) {
+  let found = null;
+
+  function visit(child) {
+    if (found) return;
+    if (ts.isCallExpression(child)) {
+      found = child;
+      return;
+    }
+    ts.forEachChild(child, visit);
+  }
+
+  visit(node);
+  return found;
+}
+
+function caseLabel(clause, sourceFile) {
+  return ts.isDefaultClause(clause) ? "default" : `case ${compact(clause.expression.getText(sourceFile))}`;
+}
+
+function scriptKind(file) {
+  if (file.endsWith(".tsx")) return ts.ScriptKind.TSX;
+  if (file.endsWith(".jsx")) return ts.ScriptKind.JSX;
+  if (file.endsWith(".js") || file.endsWith(".mjs") || file.endsWith(".cjs")) return ts.ScriptKind.JS;
+  return ts.ScriptKind.TS;
+}
+
+function lineNumber(sourceFile, node) {
+  const position = node.getStart ? node.getStart(sourceFile) : 0;
+  return sourceFile.getLineAndCharacterOfPosition(position).line + 1;
+}
+
+function normalizeDetails(details = {}) {
+  return {
+    rules: [],
+    conditions: [],
+    filters: [],
+    inputs: [],
+    outputs: [],
+    ...details,
+    rules: asArray(details.rules),
+    conditions: asArray(details.conditions),
+    filters: asArray(details.filters),
+    inputs: asArray(details.inputs),
+    outputs: asArray(details.outputs)
+  };
+}
+
+function asArray(value) {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [String(value)];
 }
 
 function buildOverlay(entry, file, nodes, language) {
@@ -259,7 +484,7 @@ function buildOverlay(entry, file, nodes, language) {
             output: "Sextant lit le fichier, construit une carte du processus, puis ecrit report.html avec les fichiers Mermaid et manifest associes."
           },
           flow,
-          risks: ["Cette surcouche explique le graphe deterministe ; faire confiance d'abord aux noeuds, aux liens, aux snippets et aux lignes source."],
+          risks: ["Cette surcouche explique le graphe deterministe ; faire confiance d'abord aux noeuds, aux liens, aux snippets, aux chemins et aux lignes source."],
           nodes: nodeOverlays
         }
       : {
@@ -272,7 +497,7 @@ function buildOverlay(entry, file, nodes, language) {
             output: "Sextant reads the file, builds a process map, and writes report.html plus the matching Mermaid and manifest files."
           },
           flow,
-          risks: ["The overlay explains the deterministic graph; trust the nodes, edges, snippets, and source lines first."],
+          risks: ["The overlay explains the deterministic graph; trust the nodes, edges, snippets, paths, and source lines first."],
           nodes: nodeOverlays
         };
   }
@@ -297,7 +522,7 @@ function buildOverlay(entry, file, nodes, language) {
         output: returns.length > 0 ? returns.join(" ou ") : "Le processus atteint la derniere action visible dans le graphe."
       },
       flow,
-      risks: ["Cette surcouche est explicative ; utiliser les noeuds, liens, snippets et lignes source deterministes pour corriger la carte."],
+      risks: ["Cette surcouche est explicative ; utiliser les noeuds, liens, snippets, chemins et lignes source deterministes pour corriger la carte."],
       nodes: nodeOverlays
     };
   }
@@ -314,7 +539,7 @@ function buildOverlay(entry, file, nodes, language) {
       output: returns.length > 0 ? returns.join(" or ") : "The process reaches the final action shown in the graph."
     },
     flow,
-    risks: ["The overlay is explanatory; use deterministic nodes, edges, snippets, and source lines to correct the map."],
+    risks: ["The overlay is explanatory; use deterministic nodes, edges, snippets, paths, and source lines to correct the map."],
     nodes: nodeOverlays
   };
 }
@@ -346,6 +571,19 @@ function explainNode(node, language, entry) {
           id: node.id,
           plainLanguage: `Decide whether this condition is true: ${code.condition || node.label}.`,
           effect: "Chooses which path the process follows next."
+        };
+  }
+  if (node.type === "loop") {
+    return language === "fr"
+      ? {
+          id: node.id,
+          plainLanguage: `Repete un bloc tant que cette condition de boucle peut continuer : ${code.condition || node.label}.`,
+          effect: "Peut faire passer le processus par les memes etapes plusieurs fois."
+        }
+      : {
+          id: node.id,
+          plainLanguage: `Repeat a block while this loop condition can continue: ${code.condition || node.label}.`,
+          effect: "Can send the process through the same steps multiple times."
         };
   }
   if (node.type === "effect") {
@@ -426,25 +664,6 @@ function explainNode(node, language, entry) {
       };
 }
 
-function cleanDecision(text) {
-  return compact(text.replace(/\s*\{\s*$/, ""));
-}
-
-function extractCondition(text) {
-  const ifMatch = /^(?:else\s+)?if\s*\((.*)\)\s*\{?$/.exec(text);
-  if (ifMatch) return compact(ifMatch[1]);
-
-  const switchMatch = /^switch\s*\((.*)\)\s*\{?$/.exec(text);
-  if (switchMatch) return compact(`switch ${switchMatch[1]}`);
-
-  return compact(text.replace(/\s*\{\s*$/, ""));
-}
-
-function firstCallName(text) {
-  const match = /(?:await\s+)?([a-zA-Z_$][\w$]*(?:\.[a-zA-Z_$][\w$]*)?)\s*\(/.exec(text);
-  return match?.[1] || null;
-}
-
 function looksLikeEffect(call, text) {
   const value = `${call} ${text}`.toLowerCase();
   return effectWords.some((word) => value.includes(word));
@@ -459,12 +678,17 @@ function humanizeCall(call) {
 }
 
 function compact(text) {
-  return text.length > 72 ? `${text.slice(0, 69)}...` : text;
+  const clean = cleanText(text);
+  return clean.length > 72 ? `${clean.slice(0, 69)}...` : clean;
 }
 
 function snippet(text) {
-  const clean = String(text).replace(/\s+/g, " ").trim();
+  const clean = cleanText(text);
   return clean.length > 240 ? `${clean.slice(0, 237)}...` : clean;
+}
+
+function cleanText(text) {
+  return String(text).replace(/\s+/g, " ").trim();
 }
 
 function slug(value) {
@@ -474,18 +698,6 @@ function slug(value) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "") || "process";
-}
-
-function escapeRegExp(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function lineNumberAt(source, index) {
-  return source.slice(0, index).split(/\r?\n/).length;
-}
-
-function countChar(value, char) {
-  return [...value].filter((item) => item === char).length;
 }
 
 function normalizeLanguage(value) {

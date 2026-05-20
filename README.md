@@ -53,6 +53,7 @@ Options:
 --thinking high
 --thinking max
 --no-thinking
+--llm-timeout-ms 300000
 --no-cache
 ```
 
@@ -67,6 +68,8 @@ Options:
 - vue macro, jamais graphe geant.
 
 Cette couche sert a comprendre le projet. Pour verifier un flux reel, utiliser ensuite `scan <file> --entry <name>`.
+
+Privacy: `scan-project --llm` envoie plusieurs fichiers source au provider LLM pour produire la lecture globale. Utiliser `scan-project` sans `--llm` pour rester 100% local. Les cles restent uniquement en variables d'environnement et ne doivent jamais etre ecrites dans le repo.
 
 ## Verification package
 
