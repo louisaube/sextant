@@ -264,6 +264,8 @@ try {
     }
   ], path.join(tmp, "index.html"));
   const reportIndexHtml = await readFile(reportIndex, "utf8");
+  assert.match(reportIndexHtml, /Par ou commencer/);
+  assert.match(reportIndexHtml, /Pages internes/);
   assert.match(reportIndexHtml, /href="first\.html"/);
   assert.match(reportIndexHtml, /href="second\.html"/);
   assert.doesNotMatch(reportIndexHtml, /href="[^"]+\.mmd"/);

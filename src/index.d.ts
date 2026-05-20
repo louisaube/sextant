@@ -242,9 +242,12 @@ export declare function writeReport(
 export interface ReportIndexItem {
   label: string;
   html: string;
+  order?: number;
+  description?: string;
   source?: string;
   entry?: string;
   mode?: string;
+  startHere?: boolean;
   subflowCount?: number;
 }
 

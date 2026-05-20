@@ -6,7 +6,7 @@ export async function writeReportIndex(reports, outputFile, options = {}) {
   const indexDir = path.dirname(target);
   const html = renderReportIndex(reports, {
     title: options.title || "Sextant reports",
-    description: options.description || "Vue macro des rapports generes. Ouvrez un rapport racine, puis descendez dans ses frames depuis le panneau lateral.",
+    description: options.description || "Un point d'entree lisible vers les rapports generes. Commencez par la vue globale, puis ouvrez une partie precise si necessaire.",
     indexDir
   });
 
@@ -16,8 +16,10 @@ export async function writeReportIndex(reports, outputFile, options = {}) {
 }
 
 function renderReportIndex(reports, options) {
-  const cards = reports.map((report) => renderReportCard(report, options.indexDir)).join("\n");
-  const count = reports.length;
+  const orderedReports = [...reports].sort((left, right) => (left.order || 0) - (right.order || 0));
+  const cards = orderedReports.map((report) => renderReportCard(report, options.indexDir)).join("\n");
+  const guide = renderGuide(orderedReports, options.indexDir);
+  const count = orderedReports.length;
 
   return `<!doctype html>
 <html lang="fr">
@@ -97,10 +99,36 @@ function renderReportIndex(reports, options) {
       gap: 14px;
     }
 
+    .guide {
+      display: grid;
+      gap: 14px;
+      margin: 0 0 18px;
+      padding: 18px;
+      border: 1px solid #d28b47;
+      border-radius: 8px;
+      background: #fff4e5;
+    }
+
+    .guide h2 {
+      margin: 0;
+      font-size: 1.15rem;
+      letter-spacing: 0;
+    }
+
+    .guide ol {
+      margin: 0;
+      padding-left: 22px;
+      color: var(--muted);
+    }
+
+    .guide li + li {
+      margin-top: 6px;
+    }
+
     .card {
       display: grid;
       gap: 14px;
-      min-height: 230px;
+      min-height: 260px;
       padding: 18px;
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -112,6 +140,10 @@ function renderReportIndex(reports, options) {
       margin: 0;
       font-size: 1.1rem;
       letter-spacing: 0;
+    }
+
+    .card p {
+      font-size: 0.95rem;
     }
 
     dl {
@@ -167,16 +199,17 @@ function renderReportIndex(reports, options) {
       <h1>${escapeHtml(options.title)}</h1>
       <p>${escapeHtml(options.description)}</p>
       <div class="meta">
-        <span class="pill">${count} rapport${count > 1 ? "s" : ""} racine${count > 1 ? "s" : ""}</span>
-        <span class="pill">HTML humain seulement</span>
-        <span class="pill">Artefacts techniques masques</span>
+        <span class="pill">${count} porte${count > 1 ? "s" : ""} d'entree</span>
+        <span class="pill">Details au clic</span>
+        <span class="pill">Fichiers techniques caches</span>
       </div>
     </header>
+    ${guide}
     <section class="grid" aria-label="Rapports racines">
       ${cards}
     </section>
     <footer>
-      Les fichiers Mermaid et Manifest restent generes a cote pour les outils, mais cette page liste seulement les entrees lisibles.
+      Ignorez les fichiers .mmd et .workflow.json sauf si vous debuggez Sextant. Ils restent disponibles pour les outils, mais cette page liste seulement les entrees utiles a lire.
     </footer>
   </main>
 </body>
@@ -186,23 +219,39 @@ function renderReportIndex(reports, options) {
 function renderReportCard(report, indexDir) {
   const href = relativeHref(indexDir, report.html);
   const label = report.label || report.title || path.basename(report.html || "report.html", ".html");
-  const mode = report.mode || "report";
+  const description = report.description || "Carte racine generee par Sextant.";
+  const mode = report.mode || "rapport";
   const source = report.source || "";
   const entry = report.entry || "";
   const subflowCount = Number.isFinite(report.subflowCount) ? report.subflowCount : 0;
 
   return `<article class="card">
   <h2>${escapeHtml(label)}</h2>
+  <p>${escapeHtml(description)}</p>
   <dl>
-    <dt>Type</dt>
+    <dt>Nature</dt>
     <dd>${escapeHtml(mode)}</dd>
-    ${source ? `<dt>Source</dt><dd>${escapeHtml(formatPath(source))}</dd>` : ""}
-    ${entry ? `<dt>Entree</dt><dd>${escapeHtml(entry)}</dd>` : ""}
-    <dt>Subflows</dt>
+    ${source ? `<dt>Code lu</dt><dd>${escapeHtml(formatPath(source))}</dd>` : ""}
+    ${entry ? `<dt>Depart</dt><dd>${escapeHtml(entry)}</dd>` : ""}
+    <dt>Pages internes</dt>
     <dd>${subflowCount}</dd>
   </dl>
-  <a class="report-link" href="${escapeAttribute(href)}">Ouvrir le rapport</a>
+  <a class="report-link" href="${escapeAttribute(href)}">Ouvrir cette carte</a>
 </article>`;
+}
+
+function renderGuide(reports, indexDir) {
+  const startReport = reports.find((report) => report.startHere) || reports[0];
+  const startHref = startReport ? relativeHref(indexDir, startReport.html) : "#";
+
+  return `<section class="guide" aria-label="Parcours conseille">
+  <h2>Par ou commencer</h2>
+  <ol>
+    <li><a href="${escapeAttribute(startHref)}">Ouvrir ${escapeHtml(startReport?.label || "la premiere carte")}</a> pour comprendre le role global du projet.</li>
+    <li>Ouvrir ensuite une carte precise seulement si une question se pose: commande, scan du code, ou generation du rapport.</li>
+    <li>Dans une carte, utiliser les pages internes pour descendre dans une fonction appelee.</li>
+  </ol>
+</section>`;
 }
 
 function relativeHref(fromDir, target) {

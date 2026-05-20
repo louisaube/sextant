@@ -18,22 +18,31 @@ if (extraArgs.includes("--llm") && !process.env.DEEPSEEK_API_KEY) {
 
 const scans = [
   {
-    label: "CLI command router",
+    order: 2,
+    label: "Comment une commande Sextant est comprise",
+    description: "Montre ce qui se passe quand quelqu'un tape une commande comme scan, render ou init.",
     file: "src/cli.js",
     entry: "main",
-    output: "examples/sextant-cli.html"
+    output: "examples/sextant-cli.html",
+    mode: "commande"
   },
   {
-    label: "Retrofit scanner",
+    order: 3,
+    label: "Comment Sextant lit du code existant",
+    description: "C'est le moteur le plus important: il ouvre un fichier, trouve une fonction, puis transforme son flux en carte.",
     file: "src/scan/inferProcess.js",
     entry: "inferProcessFromSource",
-    output: "examples/sextant-scan.html"
+    output: "examples/sextant-scan.html",
+    mode: "moteur de scan"
   },
   {
-    label: "Report writer",
+    order: 4,
+    label: "Comment Sextant ecrit les rapports",
+    description: "Montre comment une carte devient trois fichiers: page HTML, diagramme Mermaid et manifest JSON.",
     file: "src/render/writeReport.js",
     entry: "writeReport",
-    output: "examples/sextant-render.html"
+    output: "examples/sextant-render.html",
+    mode: "generation HTML"
   }
 ];
 
@@ -62,11 +71,13 @@ for (const scan of scans) {
   const output = path.join(root, scan.output);
   const subflowCount = await countSubflowsForReport(output);
   reportEntries.push({
+    order: scan.order,
     label: scan.label,
+    description: scan.description,
     html: output,
     source: scan.file,
     entry: scan.entry,
-    mode: "scan",
+    mode: scan.mode,
     subflowCount
   });
 
@@ -92,19 +103,22 @@ try {
 
 const projectOutput = path.join(root, "examples/sextant-project.html");
 reportEntries.push({
-  label: "Project overview",
+  order: 1,
+  label: "Vue globale du projet",
+  description: "Commencer ici. Cette page explique les grands blocs de Sextant avant d'entrer dans une fonction precise.",
   html: projectOutput,
   source: ".",
-  entry: "project",
-  mode: "project",
+  entry: "projet entier",
+  mode: "sommaire",
+  startHere: true,
   subflowCount: await countSubflowsForReport(projectOutput)
 });
 
-console.log("Project overview: examples/sextant-project.html");
+console.log("Vue globale du projet: examples/sextant-project.html");
 
 const indexFile = await writeReportIndex(reportEntries, path.join(root, "examples/index.html"), {
-  title: "Sextant self-scan",
-  description: "Page macro pour ouvrir les scans racines sans traverser le dossier de rapports."
+  title: "Comprendre Sextant par ses cartes",
+  description: "Un point d'entree lisible vers les rapports generes. Ouvrez d'abord la vue globale, puis descendez dans une partie seulement si vous voulez comprendre le detail."
 });
 
 console.log(`Index: ${path.relative(root, indexFile).replace(/\\/g, "/")}`);
