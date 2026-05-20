@@ -14,8 +14,9 @@
     }
   },
   "scripts": {
-    "demo": "node ./src/cli.js render ./examples/inscription.workflow.js -o ./examples/inscription.html",
-    "scan:demo": "node ./src/cli.js scan ./examples/legacy-classify.ts --entry classifyAttachment -o ./examples/legacy-classify.html",
+    "demo": "node ./src/cli.js render ./examples/inscription.workflow.js -o ./examples/inscription.html --lang fr",
+    "scan:demo": "node ./src/cli.js scan ./examples/legacy-classify.ts --entry classifyAttachment -o ./examples/legacy-classify.html --lang fr",
+    "project:scan": "node ./src/cli.js scan-project . -o ./examples/sextant-project.html --lang fr",
     "self:scan": "node ./scripts/self-scan.mjs",
     "test": "node ./test/smoke.mjs",
     "pack:smoke": "node ./test/pack-smoke.mjs"

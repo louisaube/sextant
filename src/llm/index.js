@@ -6,7 +6,9 @@ import { createDeepSeekProvider } from "./providers/deepseek.js";
 
 export async function enrichManifestWithLlm(source, manifest, options = {}) {
   const providerName = options.provider || "deepseek";
-  const model = options.model || "deepseek-chat";
+  const model = options.model || "deepseek-v4-pro";
+  const thinking = options.thinking ?? true;
+  const reasoningEffort = options.reasoningEffort || "high";
   const provider = options.providerInstance || createProvider(providerName, options);
   const context = buildLlmContext(source, manifest, {
     entry: manifest.source?.entry || options.entry,
@@ -14,7 +16,9 @@ export async function enrichManifestWithLlm(source, manifest, options = {}) {
   });
   const key = cacheKey(context, {
     provider: providerName,
-    model
+    model,
+    thinking,
+    reasoningEffort
   });
 
   let raw = options.cache === false ? null : await readCache(key, options.cacheDir);
@@ -22,7 +26,9 @@ export async function enrichManifestWithLlm(source, manifest, options = {}) {
 
   if (!raw) {
     raw = await provider.enrichProcess(context, {
-      model
+      model,
+      thinking,
+      reasoningEffort
     });
   }
 
@@ -35,6 +41,8 @@ export async function enrichManifestWithLlm(source, manifest, options = {}) {
   return mergeEnrichment(manifest, enrichment, {
     provider: providerName,
     model,
+    thinking,
+    reasoningEffort,
     cache: cacheStatus,
     promptVersion: PROMPT_VERSION
   });

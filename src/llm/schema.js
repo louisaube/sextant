@@ -1,4 +1,4 @@
-const overlayArrays = ["responsibilities", "flow", "risks"];
+const overlayArrays = ["responsibilities", "flow", "risks", "decisions", "assumptions", "openQuestions"];
 const overlayNodeArrays = ["rules", "conditions", "filters", "inputs", "outputs", "responsibilities"];
 const allowedTopLevel = new Set(["version", "overlay"]);
 const allowedOverlayFields = new Set([
@@ -9,6 +9,9 @@ const allowedOverlayFields = new Set([
   "responsibilities",
   "flow",
   "risks",
+  "decisions",
+  "assumptions",
+  "openQuestions",
   "confidence",
   "nodes",
   "suggestedSubflows"
@@ -90,6 +93,9 @@ export function validateEnrichment(value, manifest) {
       responsibilities: overlay.responsibilities || [],
       flow: overlay.flow || [],
       risks: overlay.risks || [],
+      decisions: overlay.decisions || [],
+      assumptions: overlay.assumptions || [],
+      openQuestions: overlay.openQuestions || [],
       confidence: overlay.confidence,
       nodes,
       suggestedSubflows

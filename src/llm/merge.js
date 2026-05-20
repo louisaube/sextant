@@ -4,6 +4,8 @@ export function mergeEnrichment(manifest, enrichment, metadata) {
     llm: {
       provider: metadata.provider,
       model: metadata.model,
+      thinking: metadata.thinking,
+      reasoningEffort: metadata.reasoningEffort,
       cache: metadata.cache,
       promptVersion: metadata.promptVersion,
       enriched: true
@@ -29,6 +31,9 @@ function mergeOverlay(current = {}, enriched = {}) {
       responsibilities: enriched.responsibilities?.length ? enriched.responsibilities : undefined,
       flow: enriched.flow?.length ? enriched.flow : undefined,
       risks: enriched.risks?.length ? enriched.risks : undefined,
+      decisions: enriched.decisions?.length ? enriched.decisions : undefined,
+      assumptions: enriched.assumptions?.length ? enriched.assumptions : undefined,
+      openQuestions: enriched.openQuestions?.length ? enriched.openQuestions : undefined,
       confidence: enriched.confidence,
       suggestedSubflows: enriched.suggestedSubflows?.length ? enriched.suggestedSubflows : undefined
     }),

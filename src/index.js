@@ -8,6 +8,7 @@ export {
 } from "./native/builder.js";
 
 export { inferProcessFromSource } from "./scan/inferProcess.js";
+export { inferProjectFromDirectory, buildProjectLlmSource } from "./scan/inferProject.js";
 export { enrichManifestWithLlm, buildLlmContext, createMockProvider } from "./llm/index.js";
 export { toMermaid } from "./render/toMermaid.js";
 export { toHtml } from "./render/toHtml.js";

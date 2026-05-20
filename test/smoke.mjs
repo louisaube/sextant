@@ -8,6 +8,7 @@ import {
   buildLlmContext,
   createMockProvider,
   enrichManifestWithLlm,
+  inferProjectFromDirectory,
   inferProcessFromSource,
   toHtml,
   toMermaid,
@@ -105,11 +106,20 @@ try {
   });
 
   assert.equal(router.edges.some((edge) => edge.from === "branch-1" && edge.to === "branch-4" && edge.label === "no"), true);
-  assert.equal(router.edges.some((edge) => edge.from === "branch-15" && edge.to === "error-19" && edge.label === "no"), true);
+  assert.equal(router.edges.some((edge) => edge.from === "branch-22" && edge.to === "error-26" && edge.label === "no"), true);
   assert.equal(router.nodes.find((node) => node.id === "branch-15").label, "if (command === \"scan\")");
-  assert.equal(router.nodes.find((node) => node.id === "step-17").label, "Scan File");
+  assert.equal(router.nodes.find((node) => node.id === "step-20").label, "Scan File");
   assert.match(router.overlay.effect, /one typed command/);
   assert.match(router.overlay.example.output, /writes report.html/);
+
+  const project = await inferProjectFromDirectory(root, { language: "fr" });
+  const projectHtml = toHtml(project);
+  assert.equal(project.source.mode, "project");
+  assert.equal(project.language, "fr");
+  assert.equal(project.nodes.some((node) => node.label === "Interface CLI"), true);
+  assert.match(project.overlay.plainLanguage, /petite CLI/);
+  assert.match(project.overlay.decisions.join("\n"), /Process Manifest/);
+  assert.match(projectHtml, /Decisions probables/);
 
   const scopedContext = buildLlmContext(
     "import x from 'x';\nfunction classifyAttachment() { wantedCall(); }\nfunction unrelated() { secretCall(); }",
@@ -136,6 +146,9 @@ try {
       responsibilities: ["classification documentaire"],
       flow: ["Detecter le type de document", "Envoyer en revue si la confiance est trop basse"],
       risks: ["Le scan ne suit pas encore les helpers appeles."],
+      decisions: ["Conserver le graphe deterministe separe de l'explication."],
+      assumptions: ["Le fichier teste represente un point d'entree documentaire."],
+      openQuestions: ["Quels helpers doivent devenir des sous-flows ?"],
       confidence: 0.9,
       nodes: [
         {
@@ -158,23 +171,32 @@ try {
   const enriched = await enrichManifestWithLlm(legacySource, inferred, {
     provider: "mock",
     model: "mock-model",
+    thinking: "max",
+    reasoningEffort: "max",
     providerInstance: provider,
     cacheDir: path.join(tmp, "llm-cache")
   });
 
   assert.equal(enriched.llm.provider, "mock");
   assert.equal(enriched.llm.model, "mock-model");
+  assert.equal(enriched.llm.thinking, "max");
+  assert.equal(enriched.llm.reasoningEffort, "max");
   assert.equal(enriched.llm.cache, "miss");
   assert.deepEqual(enriched.nodes, inferred.nodes);
   assert.match(enriched.overlay.plainLanguage, /non-dev/);
   assert.equal(enriched.overlay.example.output, "categorie documentaire ou REVIEW_NEEDED");
   assert.deepEqual(enriched.overlay.flow, ["Detecter le type de document", "Envoyer en revue si la confiance est trop basse"]);
   assert.deepEqual(enriched.overlay.risks, ["Le scan ne suit pas encore les helpers appeles."]);
+  assert.deepEqual(enriched.overlay.decisions, ["Conserver le graphe deterministe separe de l'explication."]);
+  assert.deepEqual(enriched.overlay.assumptions, ["Le fichier teste represente un point d'entree documentaire."]);
+  assert.deepEqual(enriched.overlay.openQuestions, ["Quels helpers doivent devenir des sous-flows ?"]);
   assert.deepEqual(enriched.edges, inferred.edges);
 
   const cached = await enrichManifestWithLlm(legacySource, inferred, {
     provider: "mock",
     model: "mock-model",
+    thinking: "max",
+    reasoningEffort: "max",
     providerInstance: provider,
     cacheDir: path.join(tmp, "llm-cache")
   });

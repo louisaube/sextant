@@ -8,7 +8,7 @@ export type SextantNodeType =
   | "subflow";
 
 export interface SextantSource {
-  mode?: "native" | "scan";
+  mode?: "native" | "scan" | "project";
   file?: string;
   entry?: string;
   line?: number;
@@ -60,6 +60,9 @@ export interface SextantOverlay {
   responsibilities?: string[];
   flow?: string[];
   risks?: string[];
+  decisions?: string[];
+  assumptions?: string[];
+  openQuestions?: string[];
   confidence?: number;
   nodes?: SextantOverlayNode[];
   suggestedSubflows?: Array<{
@@ -105,6 +108,8 @@ export interface ProcessManifest {
     cache: "hit" | "miss";
     promptVersion: string;
     enriched: boolean;
+    thinking?: boolean | string;
+    reasoningEffort?: string;
   };
 }
 
@@ -157,9 +162,16 @@ export declare function inferProcessFromSource(
   options: { entry: string; file?: string; language?: "en" | "fr"; lang?: "en" | "fr" }
 ): ProcessManifest;
 
+export declare function inferProjectFromDirectory(
+  rootDir: string,
+  options?: { language?: "en" | "fr"; lang?: "en" | "fr" }
+): Promise<ProcessManifest>;
+
+export declare function buildProjectLlmSource(rootDir: string): Promise<string>;
+
 export interface LlmProvider {
   name: string;
-  enrichProcess(context: unknown, options?: { model?: string }): Promise<unknown>;
+  enrichProcess(context: unknown, options?: { model?: string; thinking?: boolean | string; reasoningEffort?: string }): Promise<unknown>;
 }
 
 export declare function enrichManifestWithLlm(
@@ -171,6 +183,8 @@ export declare function enrichManifestWithLlm(
     language?: "en" | "fr";
     provider?: "deepseek" | string;
     model?: string;
+    thinking?: boolean | string;
+    reasoningEffort?: string;
     cache?: boolean;
     cacheDir?: string;
     providerInstance?: LlmProvider;

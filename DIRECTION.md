@@ -47,6 +47,7 @@ npm install sextant
 npx sextant render src/workflows/inscription.workflow.ts -o inscription.html
 npx sextant watch src/workflows/inscription.workflow.ts
 npx sextant scan src/docagent/index.ts --entry processIncomingAttachment -o docagent.html
+npx sextant scan-project . -o sextant-project.html --lang fr
 ```
 
 ## 3. Deux modes
@@ -99,6 +100,24 @@ Sextant scanne un point d'entree et produit une premiere carte :
 
 Ce mode est moins fiable que le mode natif.
 Il sert a cartographier, pas a garantir.
+
+### Mode projet macro
+
+On peut aussi scanner un projet entier, mais uniquement comme couche de lecture globale :
+
+```bash
+npx sextant scan-project . --llm --lang fr
+```
+
+Ce mode ne doit pas produire un graphe geant.
+Il explique :
+
+- le sens probable du projet ;
+- les modules principaux ;
+- les decisions d'architecture probablement prises ;
+- les hypotheses et questions a confirmer.
+
+Il sert a s'orienter avant les scans par point d'entree.
 
 ## 4. Principe visuel
 
@@ -272,10 +291,11 @@ React Flow ne vient que si Mermaid + hierarchie stricte ne suffit plus.
 Le mode scan peut recevoir un enrichissement LLM opt-in :
 
 - provider abstrait ;
-- DeepSeek en premier adapter ;
+- DeepSeek V4 Pro en premier adapter ;
+- thinking mode activable et utilise par defaut ;
 - cle via `DEEPSEEK_API_KEY` uniquement ;
 - cache local dans `.sextant-cache/llm` ;
-- le LLM enrichit le Process Manifest, mais ne remplace pas l'extraction deterministe.
+- le LLM enrichit la surcouche explicative, mais ne remplace jamais l'extraction deterministe.
 
 ## 9. Roadmap
 
@@ -309,7 +329,7 @@ A refuser maintenant :
 - moteur d'execution ;
 - plateforme SaaS ;
 - import Make / n8n ;
-- scan global de tout un repo ;
+- graphe global geant de tout un repo ;
 - multi-langage ;
 - documentation automatique exhaustive ;
 - React Flow immediat.

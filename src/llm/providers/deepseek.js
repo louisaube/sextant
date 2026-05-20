@@ -7,30 +7,45 @@ export function createDeepSeekProvider(options = {}) {
         throw new Error("scan --llm requires DEEPSEEK_API_KEY.");
       }
 
-      const model = requestOptions.model || "deepseek-chat";
+      const model = requestOptions.model || "deepseek-v4-pro";
+      const thinking = normalizeThinking(requestOptions.thinking);
+      const reasoningEffort = thinking.enabled
+        ? requestOptions.reasoningEffort || thinking.effort || "high"
+        : undefined;
+      const requestBody = {
+        model,
+        messages: [
+          {
+            role: "system",
+            content: systemPrompt()
+          },
+          {
+            role: "user",
+            content: JSON.stringify(context, null, 2)
+          }
+        ],
+        response_format: {
+          type: "json_object"
+        },
+        thinking: {
+          type: thinking.enabled ? "enabled" : "disabled"
+        }
+      };
+
+      if (reasoningEffort) {
+        requestBody.reasoning_effort = reasoningEffort;
+      } else {
+        requestBody.temperature = 0.1;
+      }
+
       const response = await fetch("https://api.deepseek.com/chat/completions", {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${apiKey}`,
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({
-          model,
-          messages: [
-            {
-              role: "system",
-              content: systemPrompt()
-            },
-            {
-              role: "user",
-              content: JSON.stringify(context, null, 2)
-            }
-          ],
-          response_format: {
-            type: "json_object"
-          },
-          temperature: 0.1
-        })
+        signal: AbortSignal.timeout(requestOptions.timeoutMs || 120000),
+        body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) {
@@ -62,6 +77,7 @@ Only reference existing node ids inside overlay.nodes.
 The deterministic manifest is the source of truth. Your job is an interpretive overlay only.
 Use the language requested by manifest.language. If manifest.language is "fr", write the overlay in French.
 Explain the overall effect for a smart non-developer: what changes, what is produced, or what becomes possible after the process runs.
+For project-level manifests, explain the global product meaning and reverse-engineer likely decisions as hypotheses, not facts.
 Always include a simple input-to-output example.
 Allowed shape:
 {
@@ -78,6 +94,9 @@ Allowed shape:
     "responsibilities": ["concrete responsibility"],
     "flow": ["main execution step in plain language"],
     "risks": ["concrete ambiguity, failure mode, or code-reading warning"],
+    "decisions": ["likely project or architecture decision, phrased as a hypothesis when inferred"],
+    "assumptions": ["what you are assuming from the files"],
+    "openQuestions": ["question a maintainer should confirm"],
     "confidence": 0.0,
     "nodes": [
       {
@@ -105,4 +124,12 @@ Allowed shape:
     ]
   }
 }`;
+}
+
+function normalizeThinking(value) {
+  if (value === false || value === "false" || value === "disabled" || value === "off") {
+    return { enabled: false };
+  }
+  if (value === "max") return { enabled: true, effort: "max" };
+  return { enabled: true };
 }

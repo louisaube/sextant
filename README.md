@@ -24,6 +24,7 @@ npx sextant render src/workflows/inscription.workflow.ts -o inscription.html
 npx sextant watch src/workflows/inscription.workflow.ts -o inscription.html
 npx sextant scan src/docagent/index.ts --entry processIncomingAttachment -o docagent.html
 npx sextant scan src/docagent/index.ts --entry processIncomingAttachment --llm -o docagent.html
+npx sextant scan-project . -o sextant-project.html --lang fr
 ```
 
 Package npm : `@louis/sextant`.
@@ -35,21 +36,37 @@ import { workflow, step, branch, effect } from "@louis/sextant";
 
 ## LLM scan enrichment
 
-LLM enrichment is opt-in and uses DeepSeek by default because it is cheap.
+LLM enrichment is opt-in and uses DeepSeek V4 Pro by default.
 The LLM enriches the heuristic Manifest; it does not replace deterministic extraction.
 
 ```bash
 set DEEPSEEK_API_KEY=...
-npx sextant scan src/docagent/index.ts --entry processIncomingAttachment --llm
+npx sextant scan src/docagent/index.ts --entry processIncomingAttachment --llm --lang fr
+npx sextant scan-project . --llm --lang fr
 ```
 
 Options:
 
 ```bash
 --provider deepseek
---model deepseek-chat
+--model deepseek-v4-pro
+--thinking high
+--thinking max
+--no-thinking
 --no-cache
 ```
+
+## Scan projet macro
+
+`scan-project` ajoute une couche de retro-engineering globale :
+
+- sens probable du projet ;
+- responsabilites principales ;
+- decisions d'architecture probables ;
+- hypotheses et questions a confirmer ;
+- vue macro, jamais graphe geant.
+
+Cette couche sert a comprendre le projet. Pour verifier un flux reel, utiliser ensuite `scan <file> --entry <name>`.
 
 ## Verification package
 

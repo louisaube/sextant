@@ -1,6 +1,15 @@
 export function buildLlmContext(source, manifest, options) {
   const entry = options.entry;
 
+  if (manifest.source?.mode === "project") {
+    return {
+      entry: entry || "project",
+      file: options.file || manifest.source.file || "unknown",
+      projectSource: source,
+      manifest
+    };
+  }
+
   return {
     entry,
     file: options.file || "unknown",

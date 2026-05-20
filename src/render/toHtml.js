@@ -3,12 +3,18 @@ import { toMermaid } from "./toMermaid.js";
 const copy = {
   en: {
     tagline: "Sextant process graph. Deterministic graph first, interpretive overlay on the side.",
+    llmEnriched: "LLM enriched",
+    cache: "cache",
+    thinking: "thinking",
     overlay: "Interpretive Overlay",
     forNonDeveloper: "For a non-developer",
     overallEffect: "Overall Effect",
     summary: "Summary",
     overlayFlow: "Overlay Flow",
     responsibilities: "Responsibilities",
+    decisions: "Likely Decisions",
+    assumptions: "Assumptions",
+    openQuestions: "Open Questions",
     overlayRisks: "Overlay Risks",
     deterministicWarnings: "Deterministic Warnings",
     source: "Source",
@@ -34,12 +40,18 @@ const copy = {
   },
   fr: {
     tagline: "Graphe de processus Sextant. Graphe deterministe d'abord, surcouche explicative sur le cote.",
+    llmEnriched: "Enrichi par LLM",
+    cache: "cache",
+    thinking: "reflexion",
     overlay: "Surcouche explicative",
     forNonDeveloper: "Pour non-developpeur",
     overallEffect: "Effet global",
     summary: "Resume",
     overlayFlow: "Lecture expliquee",
     responsibilities: "Responsabilites",
+    decisions: "Decisions probables",
+    assumptions: "Hypotheses",
+    openQuestions: "Questions a confirmer",
     overlayRisks: "Risques de lecture",
     deterministicWarnings: "Alertes deterministes",
     source: "Source",
@@ -72,7 +84,7 @@ export function toHtml(manifest, options = {}) {
   const title = escapeHtml(manifest.title || manifest.id || "Sextant");
   const manifestJson = JSON.stringify(manifest).replace(/</g, "\\u003c");
   const llmBadge = manifest.llm?.enriched
-    ? `<span class="badge">LLM enriched &middot; ${escapeHtml(manifest.llm.provider)} &middot; ${escapeHtml(manifest.llm.model)} &middot; cache ${escapeHtml(manifest.llm.cache)}</span>`
+    ? `<span class="badge">${text.llmEnriched} &middot; ${escapeHtml(manifest.llm.provider)} &middot; ${escapeHtml(manifest.llm.model)}${manifest.llm.thinking ? ` &middot; ${text.thinking} ${escapeHtml(manifest.llm.reasoningEffort || "high")}` : ""} &middot; ${text.cache} ${escapeHtml(manifest.llm.cache)}</span>`
     : "";
 
   return `<!doctype html>
@@ -342,6 +354,9 @@ ${escapeHtml(mermaid)}
         overlay.summary ? '<section><h3>' + text.summary + '</h3><p>' + escapeHtml(overlay.summary) + '</p></section>' : '',
         list(text.overlayFlow, overlay.flow, false),
         list(text.responsibilities, overlay.responsibilities, false),
+        list(text.decisions, overlay.decisions, false),
+        list(text.assumptions, overlay.assumptions, false),
+        list(text.openQuestions, overlay.openQuestions, false),
         list(text.overlayRisks, overlay.risks, false),
         list(text.deterministicWarnings, manifest.details?.risks, false),
         subflows(overlay.suggestedSubflows),

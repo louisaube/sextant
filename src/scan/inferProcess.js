@@ -244,7 +244,7 @@ function inferLine(line) {
 }
 
 function buildOverlay(entry, file, nodes, language) {
-  const nodeOverlays = nodes.map((node) => explainNode(node, language));
+  const nodeOverlays = nodes.map((node) => explainNode(node, language, entry));
   const flow = nodeOverlays.map((node) => node.plainLanguage).filter(Boolean);
 
   if (entry === "main" && nodes.some((node) => node.details?.code?.condition?.includes("command ==="))) {
@@ -319,7 +319,7 @@ function buildOverlay(entry, file, nodes, language) {
   };
 }
 
-function explainNode(node, language) {
+function explainNode(node, language, entry) {
   const code = node.details?.code || {};
 
   if (node.type === "entry") {
@@ -375,6 +375,19 @@ function explainNode(node, language) {
         };
   }
   if (node.type === "return") {
+    if (entry === "main") {
+      return language === "fr"
+        ? {
+            id: node.id,
+            plainLanguage: "La commande choisie est terminee ; Sextant rend la main au terminal.",
+            effect: "Fin normale de cette branche de commande."
+          }
+        : {
+            id: node.id,
+            plainLanguage: "The selected command is done; Sextant gives control back to the terminal.",
+            effect: "Normal end of this command branch."
+          };
+    }
     return language === "fr"
       ? {
           id: node.id,

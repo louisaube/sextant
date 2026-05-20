@@ -59,6 +59,25 @@ for (const scan of scans) {
   console.log(`${scan.label}: ${scan.output}`);
 }
 
+try {
+  await exec(process.execPath, [
+    cli,
+    "scan-project",
+    root,
+    ...extraArgs,
+    "-o",
+    path.join(root, "examples/sextant-project.html")
+  ], {
+    cwd: root
+  });
+} catch (error) {
+  if (error.stdout) process.stdout.write(error.stdout);
+  if (error.stderr) process.stderr.write(error.stderr);
+  process.exit(error.code || 1);
+}
+
+console.log("Project overview: examples/sextant-project.html");
+
 function withDefaultLanguage(args) {
   if (args.includes("--lang") || args.includes("--language")) return args;
   return [...args, "--lang", "fr"];

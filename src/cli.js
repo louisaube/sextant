@@ -7,6 +7,7 @@ import { pathToFileURL } from "node:url";
 import { getCurrentWorkflow } from "./index.js";
 import { enrichManifestWithLlm } from "./llm/index.js";
 import { inferProcessFromSource } from "./scan/inferProcess.js";
+import { buildProjectLlmSource, inferProjectFromDirectory } from "./scan/inferProject.js";
 import { writeReport } from "./render/writeReport.js";
 
 const command = process.argv[2];
@@ -41,7 +42,17 @@ async function main() {
 
   if (command === "scan") {
     const args = parseArgs(process.argv.slice(3));
+    if (args.project) {
+      await scanProject(args);
+      return;
+    }
     await scanFile(args);
+    return;
+  }
+
+  if (command === "scan-project" || command === "scan:project") {
+    const args = parseArgs(process.argv.slice(3));
+    await scanProject(args);
     return;
   }
 
@@ -126,13 +137,41 @@ async function scanFile(args) {
       file,
       language,
       provider: args.provider || "deepseek",
-      model: args.model || "deepseek-chat",
+      model: args.model || "deepseek-v4-pro",
+      thinking: parseThinking(args),
+      reasoningEffort: parseReasoningEffort(args),
       cache: args.cache !== false,
       cacheDir: args["cache-dir"]
     });
   }
 
   const output = args.o || args.output || defaultOutput(input);
+  const files = await writeReport(manifest, output);
+  console.log(`wrote ${files.html}`);
+}
+
+async function scanProject(args) {
+  const input = args._[0] || ".";
+  const root = path.resolve(input);
+  const language = normalizeLanguage(args.lang || args.language);
+  let manifest = await inferProjectFromDirectory(root, { language });
+
+  if (args.llm) {
+    const source = await buildProjectLlmSource(root);
+    manifest = await enrichManifestWithLlm(source, manifest, {
+      entry: "project",
+      file: root,
+      language,
+      provider: args.provider || "deepseek",
+      model: args.model || "deepseek-v4-pro",
+      thinking: parseThinking(args),
+      reasoningEffort: parseReasoningEffort(args),
+      cache: args.cache !== false,
+      cacheDir: args["cache-dir"]
+    });
+  }
+
+  const output = args.o || args.output || path.join(root, "sextant-project.html");
   const files = await writeReport(manifest, output);
   console.log(`wrote ${files.html}`);
 }
@@ -190,7 +229,7 @@ function isManifest(value) {
 
 function parseArgs(argv) {
   const parsed = { _: [] };
-  const booleanFlags = new Set(["llm", "no-cache"]);
+  const booleanFlags = new Set(["llm", "no-cache", "project", "no-thinking"]);
 
   for (let index = 0; index < argv.length; index++) {
     const value = argv[index];
@@ -201,6 +240,9 @@ function parseArgs(argv) {
       parsed.entry = argv[++index];
     } else if (value === "--no-cache") {
       parsed.cache = false;
+    } else if (value === "--thinking") {
+      const next = argv[index + 1];
+      parsed.thinking = next && !next.startsWith("--") ? argv[++index] : true;
     } else if (booleanFlags.has(value.slice(2))) {
       parsed[value.slice(2)] = true;
     } else if (value.startsWith("--")) {
@@ -211,6 +253,22 @@ function parseArgs(argv) {
   }
 
   return parsed;
+}
+
+function parseThinking(args) {
+  if (args["no-thinking"]) return false;
+  if (args.thinking === false) return false;
+  if (args.thinking === "false" || args.thinking === "disabled" || args.thinking === "off") return false;
+  if (args.thinking === "max") return "max";
+  return true;
+}
+
+function parseReasoningEffort(args) {
+  if (args["reasoning-effort"]) return args["reasoning-effort"];
+  if (args.effort) return args.effort;
+  if (args.thinking === "max") return "max";
+  if (args.thinking === "high") return "high";
+  return "high";
 }
 
 function defaultOutput(input) {
@@ -238,6 +296,7 @@ Usage:
   sextant render <workflow.ts|workflow.js> -o <report.html> --lang fr
   sextant watch <workflow.ts|workflow.js> -o <report.html> --lang fr
   sextant scan <file.ts|file.js> --entry <name> -o <report.html> --lang fr
-  sextant scan <file.ts|file.js> --entry <name> --llm --provider deepseek --model deepseek-chat --lang fr
+  sextant scan <file.ts|file.js> --entry <name> --llm --provider deepseek --model deepseek-v4-pro --thinking high --lang fr
+  sextant scan-project . -o <report.html> --llm --lang fr
 `);
 }
