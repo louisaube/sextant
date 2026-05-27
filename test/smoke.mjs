@@ -94,6 +94,7 @@ try {
   const inferredHtml = toHtml(inferred);
   assert.match(inferredHtml, /For a non-developer/);
   assert.match(inferredHtml, /Overall Effect/);
+  assert.match(inferredHtml, /Guided Reading/);
   assert.match(inferredHtml, /Execution Paths/);
   assert.equal(inferred.nodes.find((node) => node.id === "effect-5").details.code.call, "saveToDrive");
   assert.match(inferred.nodes.find((node) => node.id === "effect-5").details.code.snippet, /const driveFile = await saveToDrive/);
@@ -109,6 +110,7 @@ try {
   assert.match(inferredFrHtml, /<html lang="fr">/);
   assert.match(inferredFrHtml, /Surcouche explicative/);
   assert.match(inferredFrHtml, /Effet global/);
+  assert.match(inferredFrHtml, /Lecture guidee/);
   assert.match(inferredFrHtml, /Cas possibles/);
   assert.match(inferredFrHtml, /Atteint quand/);
 

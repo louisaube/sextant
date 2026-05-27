@@ -15,6 +15,11 @@ const copy = {
     decisions: "Likely Decisions",
     assumptions: "Assumptions",
     openQuestions: "Open Questions",
+    guidedReading: "Guided Reading",
+    guidedStart: "Start with the overall effect, then check the possible paths.",
+    guidedFrames: "Open these frames next",
+    guidedExternal: "External boundaries to verify",
+    guidedEvidence: "Use snippets and source lines as proof. Treat the overlay as interpretation.",
     paths: "Execution Paths",
     reachedWhen: "Reached When",
     pathCondition: "Condition",
@@ -69,6 +74,11 @@ const copy = {
     decisions: "Decisions probables",
     assumptions: "Hypotheses",
     openQuestions: "Questions a confirmer",
+    guidedReading: "Lecture guidee",
+    guidedStart: "Commencer par l'effet global, puis verifier les cas possibles.",
+    guidedFrames: "Frames a ouvrir ensuite",
+    guidedExternal: "Frontieres externes a verifier",
+    guidedEvidence: "Utiliser les extraits et lignes source comme preuve. La surcouche reste une interpretation.",
     paths: "Cas possibles",
     reachedWhen: "Atteint quand",
     pathCondition: "Condition",
@@ -415,6 +425,7 @@ ${escapeHtml(mermaid)}
         overlay.plainLanguage ? '<section><h3>' + text.forNonDeveloper + '</h3><div class="explain">' + escapeHtml(overlay.plainLanguage) + '</div></section>' : '',
         overlay.effect ? '<section><h3>' + text.overallEffect + '</h3><div class="explain">' + escapeHtml(overlay.effect) + '</div></section>' : '',
         example(overlay.example),
+        guidedReading(),
         paths(manifest.analysis),
         nextFrames(),
         overlay.summary ? '<section><h3>' + text.summary + '</h3><p>' + escapeHtml(overlay.summary) + '</p></section>' : '',
@@ -483,6 +494,42 @@ ${escapeHtml(mermaid)}
           (target.reason ? ' <span class="meta">' + escapeHtml(target.reason) + '</span>' : '') +
           '</li>').join("") +
         '</ul></section>';
+    }
+
+    function guidedReading() {
+      const importantFrames = manifest.nodes
+        .map((node) => ({ node, target: node.details?.callTarget }))
+        .filter((item) => item.target && item.target.reason === "expanded" && item.node.subflow)
+        .filter((item) => !isTrivialFrame(item.target.entry))
+        .slice(0, 3);
+      const externalFrames = manifest.nodes
+        .map((node) => ({ node, target: node.details?.callTarget }))
+        .filter((item) => item.target && ["front", "route", "data", "storage", "integration"].includes(item.target.kind))
+        .slice(0, 4);
+      const frameItems = importantFrames.map(({ node, target }) => {
+        const link = node.subflow ? subflowLinks[node.subflow] : "";
+        const label = escapeHtml(node.label + (target.entry ? " / " + target.entry : ""));
+        return '<li>' + (link ? '<a href="' + escapeHtml(link) + '">' + label + '</a>' : label) + '</li>';
+      }).join("");
+      const externalItems = externalFrames.map(({ node, target }) =>
+        '<li><strong>' + escapeHtml(target.kind) + '</strong> ' + escapeHtml(node.label) +
+        (target.system ? ' <span class="meta">' + escapeHtml(target.system) + '</span>' : '') +
+        (target.operation ? ' <code>' + escapeHtml(target.operation) + '</code>' : '') +
+        '</li>'
+      ).join("");
+
+      return '<section><h3>' + text.guidedReading + '</h3>' +
+        '<ol>' +
+          '<li>' + text.guidedStart + '</li>' +
+          (frameItems ? '<li>' + text.guidedFrames + '<ul>' + frameItems + '</ul></li>' : '') +
+          (externalItems ? '<li>' + text.guidedExternal + '<ul>' + externalItems + '</ul></li>' : '') +
+          '<li>' + text.guidedEvidence + '</li>' +
+        '</ol>' +
+        '</section>';
+    }
+
+    function isTrivialFrame(entry) {
+      return /(^|\.)(normalize|slug|scanKey|safeFileName|defaultOutput|withLanguage|parseDepth)/i.test(entry || "");
     }
 
     function callTarget(value, node) {
